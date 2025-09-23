@@ -11,7 +11,7 @@
         // API'den ayarları çek ve formu doldur
         async function loadSettings() {
             try {
-                const response = await fetch('http://localhost:3000/monitor/settings');
+                const response = await fetch('http://3.70.236.11/monitor/settings');
                 const data = await response.json();
 
                 if (data.success && data.settings) {
@@ -87,7 +87,7 @@
                 const interval = document.getElementById('interval').value;
 
                 // API'ye POST isteği gönder
-                const response = await fetch('http://localhost:3000/monitor/settings', {
+                const response = await fetch('http://3.70.236.11/monitor/settings', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -179,7 +179,7 @@
                 arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
                 arrow.classList.add('animate-spin');
 
-                const response = await fetch('http://localhost:3000/api/sub/summary');
+                const response = await fetch('http://3.70.236.11/api/sub/summary');
                 const data = await response.json();
 
                 if (data.success) {
@@ -207,7 +207,7 @@
                 arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
                 arrow.classList.add('animate-spin');
 
-                const response = await fetch('http://localhost:3000/api/main/balance');
+                const response = await fetch('http://3.70.236.11/api/main/balance');
                 const data = await response.json();
 
                 if (data.success) {
@@ -235,7 +235,7 @@
                 arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
                 arrow.classList.add('animate-spin');
 
-                const response = await fetch('http://localhost:3000/api/main/earnings');
+                const response = await fetch('http://3.70.236.11/api/main/earnings');
                 const data = await response.json();
 
                 if (data.success) {

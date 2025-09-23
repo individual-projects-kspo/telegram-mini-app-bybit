@@ -2,29 +2,104 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Bot Ayarları</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100vh;
+            height: 100dvh; /* Dynamic viewport height for mobile */
+            overflow-x: hidden;
+            position: fixed;
+            width: 100%;
+            background: #111827;
+        }
+
+        /* Telegram specific styles */
+        body {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        /* Hide scrollbars but allow scrolling */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Ensure full height on all browsers */
+        .app-container {
+            min-height: 100vh;
+            min-height: 100dvh;
+            height: 100vh;
+            height: 100dvh;
+        }
+    </style>
 </head>
-<body class="bg-gray-900 min-h-screen">
+<body class="bg-gray-900 app-container">
     <script>
         // Telegram Web App initialization
         if (window.Telegram && window.Telegram.WebApp) {
             const tg = window.Telegram.WebApp;
 
+            // Request fullscreen mode
+            if (tg.requestFullscreen) {
+                tg.requestFullscreen();
+            }
+
             // Expand the app to fullscreen
             tg.expand();
-
-            // Enable fullscreen mode
-            tg.enableFullscreen();
 
             // Set header color to match app theme
             tg.setHeaderColor('#111827'); // gray-900
 
+            // Remove the main button if it exists
+            tg.MainButton.hide();
+
             // Show the app as ready
             tg.ready();
+
+            // Alternative method for fullscreen
+            if (tg.web_app_request_fullscreen) {
+                tg.web_app_request_fullscreen();
+            }
+
+            // Force fullscreen viewport with multiple attempts
+            setTimeout(() => {
+                tg.expand();
+                if (tg.requestFullscreen) {
+                    tg.requestFullscreen();
+                }
+            }, 100);
+
+            setTimeout(() => {
+                if (tg.web_app_request_fullscreen) {
+                    tg.web_app_request_fullscreen();
+                }
+            }, 200);
         }
+
+        // Ensure fullscreen on load
+        window.addEventListener('load', () => {
+            // Set viewport height dynamically
+            const setVH = () => {
+                let vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', `${vh}px`);
+            };
+
+            setVH();
+            window.addEventListener('resize', setVH);
+            window.addEventListener('orientationchange', setVH);
+        });
     </script>
     <script>
         // API'den ayarları çek ve formu doldur

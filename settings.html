@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ayarlar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 min-h-screen">
+    <script>
+        // API'den ayarları çek ve formu doldur
+        async function loadSettings() {
+            try {
+                const response = await fetch('http://localhost:3000/monitor/settings');
+                const data = await response.json();
+
+                if (data.success && data.settings) {
+                    const settings = data.settings;
+
+                    // Form alanlarını doldur
+                    document.getElementById('positionThreshold').value = settings.positionValueThreshold || '';
+                    document.getElementById('imThreshold').value = settings.imThreshold || '';
+                    document.getElementById('interval').value = settings.intervalTime || '';
+
+                    // Status indicator güncelle
+                    updateStatusIndicator(settings.isRunning);
+
+                    // Uptime güncelle
+                    updateUptime(settings.uptime);
+                }
+            } catch (error) {
+                console.error('Ayarlar yüklenirken hata:', error);
+            }
+        }
+
+        // Status indicator güncelleme fonksiyonu
+        function updateStatusIndicator(isRunning) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+
+            if (isRunning) {
+                indicator.className = 'w-3 h-3 rounded-full bg-green-500 transition-all duration-300 animate-pulse';
+                statusText.textContent = 'Aktif';
+                statusText.className = 'text-xs text-green-400';
+            } else {
+                indicator.className = 'w-3 h-3 rounded-full bg-red-500 transition-all duration-300 animate-pulse';
+                statusText.textContent = 'Pasif';
+                statusText.className = 'text-xs text-red-400';
+            }
+        }
+
+        // Uptime formatla ve göster
+        function updateUptime(uptimeMinutes) {
+            const uptimeElement = document.getElementById('uptimeText');
+
+            if (!uptimeMinutes || uptimeMinutes === 0) {
+                uptimeElement.textContent = '00:00:00:00';
+                return;
+            }
+
+            const totalSeconds = uptimeMinutes * 60;
+            const days = Math.floor(totalSeconds / (24 * 60 * 60));
+            const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60));
+            const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+            const seconds = totalSeconds % 60;
+
+            const formattedUptime = `${String(days).padStart(2, '0')}:${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            uptimeElement.textContent = formattedUptime;
+        }
+
+        // Ayarları kaydet
+        async function saveSettings(event) {
+            event.preventDefault();
+
+            const button = document.getElementById('saveButton');
+            const originalText = button.textContent;
+
+            try {
+                // Button durumunu güncelle
+                button.textContent = 'Kaydediliyor...';
+                button.disabled = true;
+                button.classList.add('opacity-50');
+
+                // Form verilerini al
+                const positionThreshold = document.getElementById('positionThreshold').value;
+                const imThreshold = document.getElementById('imThreshold').value;
+                const interval = document.getElementById('interval').value;
+
+                // API'ye POST isteği gönder
+                const response = await fetch('http://localhost:3000/monitor/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        imThreshold: parseFloat(imThreshold) || 0,
+                        positionValueThreshold: parseFloat(positionThreshold) || 0,
+                        intervalTime: parseInt(interval) || 0
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Başarılı kayıt
+                    button.textContent = 'Kaydedildi!';
+                    button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    button.classList.add('bg-green-600');
+
+                    // 2 saniye sonra normal haline döndür
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.classList.remove('bg-green-600');
+                        button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                        button.disabled = false;
+                        button.classList.remove('opacity-50');
+
+                        // Ayarları yeniden yükle
+                        loadSettings();
+                    }, 2000);
+                } else {
+                    throw new Error(data.message || 'Kayıt başarısız');
+                }
+
+            } catch (error) {
+                console.error('Ayarlar kaydedilirken hata:', error);
+
+                // Hata durumu
+                button.textContent = 'Hata!';
+                button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                button.classList.add('bg-red-600');
+
+                // 2 saniye sonra normal haline döndür
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('bg-red-600');
+                    button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    button.disabled = false;
+                    button.classList.remove('opacity-50');
+                }, 2000);
+            }
+        }
+
+        // Sayfa yüklendiğinde ayarları getir
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+
+            // Form submit event listener ekle
+            document.querySelector('form').addEventListener('submit', saveSettings);
+
+            // Hesap işlemleri buton event listeners
+            addAccountButtonListeners();
+        });
+
+        // Hesap işlemleri buton listeners
+        function addAccountButtonListeners() {
+            // Subaccount Summary butonu
+            document.querySelector('[data-action="subaccount-summary"]').addEventListener('click', async () => {
+                await fetchAndShowSubaccountSummary();
+            });
+
+            // Main Account Summary butonu
+            document.querySelector('[data-action="main-account-summary"]').addEventListener('click', async () => {
+                await fetchAndShowMainAccountSummary();
+            });
+
+            document.querySelector('[data-action="main-account-earning"]').addEventListener('click', async () => {
+                await fetchAndShowMainAccountEarning();
+            });
+        }
+
+        // Subaccount Summary API çağırıp modal göster
+        async function fetchAndShowSubaccountSummary() {
+            const button = document.querySelector('[data-action="subaccount-summary"]');
+            const arrow = button.querySelector('svg:last-child');
+
+            try {
+                // Loading state
+                arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
+                arrow.classList.add('animate-spin');
+
+                const response = await fetch('http://localhost:3000/api/sub/summary');
+                const data = await response.json();
+
+                if (data.success) {
+                    showSubaccountModal(data.data);
+                } else {
+                    alert('Veri alınamadı');
+                }
+            } catch (error) {
+                console.error('API hatası:', error);
+                alert('Bir hata oluştu');
+            } finally {
+                // Reset to arrow
+                arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>';
+                arrow.classList.remove('animate-spin');
+            }
+        }
+
+        // Main Account Summary API çağırıp modal göster
+        async function fetchAndShowMainAccountSummary() {
+            const button = document.querySelector('[data-action="main-account-summary"]');
+            const arrow = button.querySelector('svg:last-child');
+
+            try {
+                // Loading state
+                arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
+                arrow.classList.add('animate-spin');
+
+                const response = await fetch('http://localhost:3000/api/main/balance');
+                const data = await response.json();
+
+                if (data.success) {
+                    showMainAccountModal(data.data);
+                } else {
+                    alert('Veri alınamadı');
+                }
+            } catch (error) {
+                console.error('API hatası:', error);
+                alert('Bir hata oluştu');
+            } finally {
+                // Reset to arrow
+                arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>';
+                arrow.classList.remove('animate-spin');
+            }
+        }
+
+        // Main Account Earning API çağırıp modal göster
+        async function fetchAndShowMainAccountEarning() {
+            const button = document.querySelector('[data-action="main-account-earning"]');
+            const arrow = button.querySelector('svg:last-child');
+
+            try {
+                // Loading state
+                arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>';
+                arrow.classList.add('animate-spin');
+
+                const response = await fetch('http://localhost:3000/api/main/earnings');
+                const data = await response.json();
+
+                if (data.success) {
+                    showMainAccountEarningModal(data.data);
+                } else {
+                    alert('Veri alınamadı');
+                }
+            } catch (error) {
+                console.error('API hatası:', error);
+                alert('Bir hata oluştu');
+            } finally {
+                // Reset to arrow
+                arrow.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>';
+                arrow.classList.remove('animate-spin');
+            }
+        }
+
+        // Subaccount modal göster
+        function showSubaccountModal(data) {
+            const modal = createSubaccountModal(data);
+            document.body.appendChild(modal);
+
+            // Modal'ı göster
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('.modal-content').classList.remove('scale-95');
+                modal.querySelector('.modal-content').classList.add('scale-100');
+            }, 10);
+        }
+
+        // Main Account modal göster
+        function showMainAccountModal(data) {
+            const modal = createMainAccountModal(data);
+            document.body.appendChild(modal);
+
+            // Modal'ı göster
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('.modal-content').classList.remove('scale-95');
+                modal.querySelector('.modal-content').classList.add('scale-100');
+            }, 10);
+        }
+
+        // Main Account Earning modal göster
+        function showMainAccountEarningModal(data) {
+            const modal = createMainAccountEarningModal(data);
+            document.body.appendChild(modal);
+
+            // Modal'ı göster
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('.modal-content').classList.remove('scale-95');
+                modal.querySelector('.modal-content').classList.add('scale-100');
+            }, 10);
+        }
+
+        // Subaccount modal oluştur
+        function createSubaccountModal(data) {
+            const summary = data.summary;
+            const positions = data.positions;
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 transition-opacity duration-300';
+
+            modal.innerHTML = `
+                <div class="modal-content bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transform scale-95 transition-transform duration-300">
+                    <!-- Header -->
+                    <div class="bg-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold text-white">Subaccount Summary</h2>
+                        <button onclick="closeModal(this)" class="text-gray-400 hover:text-white">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="overflow-y-auto max-h-[calc(90vh-80px)]">
+                        <!-- Summary Cards -->
+                        <div class="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Total Equity</p>
+                                <p class="text-lg font-semibold text-white">$${summary.totalEquity.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Available Balance</p>
+                                <p class="text-lg font-semibold text-white">$${summary.availableBalance.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Margin Balance</p>
+                                <p class="text-lg font-semibold text-white">$${summary.marginBalance.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Unrealized PnL</p>
+                                <p class="text-lg font-semibold ${summary.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                    $${summary.unrealizedPnL.toLocaleString()}
+                                </p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">MM Equity Ratio</p>
+                                <p class="text-lg font-semibold text-white">${summary.mmEquityRatio.toFixed(4)}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">IM Equity Ratio</p>
+                                <p class="text-lg font-semibold text-white">${summary.imEquityRatio.toFixed(4)}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Maintenance Margin</p>
+                                <p class="text-lg font-semibold text-white">$${summary.maintenanceMargin.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Initial Margin</p>
+                                <p class="text-lg font-semibold text-white">$${summary.initialMargin.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Open Positions</p>
+                                <p class="text-lg font-semibold text-white">${summary.openPositionsCount}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Total Position Value</p>
+                                <p class="text-lg font-semibold text-white">$${summary.totalPositionValue.toLocaleString()}</p>
+                            </div>
+                        </div>
+
+                        <!-- USDT Balance -->
+                        <div class="px-4 pb-4">
+                            <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">USDT Balance</h3>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    <div>
+                                        <p class="text-gray-400">Wallet Balance</p>
+                                        <p class="text-white font-medium">$${data.usdtBalance.walletBalance.toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-gray-400">Available</p>
+                                        <p class="text-white font-medium">$${data.usdtBalance.availableBalance.toLocaleString()}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-gray-400">Unrealized PnL</p>
+                                        <p class="font-medium ${data.usdtBalance.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                            $${data.usdtBalance.unrealizedPnl.toLocaleString()}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p class="text-gray-400">Equity</p>
+                                        <p class="text-white font-medium">$${data.usdtBalance.equity.toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Positions -->
+                        <div class="px-4 pb-4">
+                            <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Open Positions (${positions.length})</h3>
+                            <div class="bg-gray-700 rounded-lg overflow-hidden">
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-sm">
+                                        <thead class="bg-gray-600">
+                                            <tr>
+                                                <th class="text-left p-3 text-gray-300">Symbol</th>
+                                                <th class="text-right p-3 text-gray-300">Side</th>
+                                                <th class="text-right p-3 text-gray-300">Size</th>
+                                                <th class="text-right p-3 text-gray-300">Entry Price</th>
+                                                <th class="text-right p-3 text-gray-300">Value</th>
+                                                <th class="text-right p-3 text-gray-300">PnL</th>
+                                                <th class="text-right p-3 text-gray-300">%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-600">
+                                            ${positions.map(pos => `
+                                                <tr class="hover:bg-gray-600">
+                                                    <td class="p-3 text-white font-medium">${pos.symbol}</td>
+                                                    <td class="p-3 text-right">
+                                                        <span class="text-xs px-2 py-1 rounded ${pos.side === 'Buy' ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
+                                                            ${pos.side}
+                                                        </span>
+                                                    </td>
+                                                    <td class="p-3 text-right text-gray-300">${pos.size.toLocaleString()}</td>
+                                                    <td class="p-3 text-right text-gray-300">$${pos.entryPrice.toFixed(6)}</td>
+                                                    <td class="p-3 text-right text-gray-300">$${pos.positionValue.toLocaleString()}</td>
+                                                    <td class="p-3 text-right font-medium ${pos.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                                        $${pos.unrealizedPnl.toLocaleString()}
+                                                    </td>
+                                                    <td class="p-3 text-right font-medium ${pos.percentage >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                                        ${pos.percentage.toFixed(2)}%
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return modal;
+        }
+
+        // Main Account modal oluştur
+        function createMainAccountModal(data) {
+            const summary = data.summary;
+            const coinDetails = data.coinDetails;
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 transition-opacity duration-300';
+
+            modal.innerHTML = `
+                <div class="modal-content bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transform scale-95 transition-transform duration-300">
+                    <!-- Header -->
+                    <div class="bg-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold text-white">Main Account Summary</h2>
+                        <button onclick="closeModal(this)" class="text-gray-400 hover:text-white">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="overflow-y-auto max-h-[calc(90vh-80px)]">
+                        <!-- Account Type -->
+                        <div class="p-4 border-b border-gray-700">
+                            <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Account Type</h3>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-white font-medium">${summary.accountType}</p>
+                            </div>
+                        </div>
+
+                        <!-- Summary Cards -->
+                        <div class="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Total Equity</p>
+                                <p class="text-lg font-semibold text-white">$${summary.totalEquity.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Available Balance</p>
+                                <p class="text-lg font-semibold text-white">$${summary.availableBalance.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Margin Balance</p>
+                                <p class="text-lg font-semibold text-white">$${summary.marginBalance.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Unrealized PnL</p>
+                                <p class="text-lg font-semibold ${summary.unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                    $${summary.unrealizedPnL.toLocaleString()}
+                                </p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">MM Equity Ratio</p>
+                                <p class="text-lg font-semibold text-white">${summary.mmEquityRatio.toFixed(4)}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">IM Equity Ratio</p>
+                                <p class="text-lg font-semibold text-white">${summary.imEquityRatio.toFixed(4)}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Maintenance Margin</p>
+                                <p class="text-lg font-semibold text-white">$${summary.maintenanceMargin.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Initial Margin</p>
+                                <p class="text-lg font-semibold text-white">$${summary.initialMargin.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-3">
+                                <p class="text-xs text-gray-400 uppercase">Open Positions</p>
+                                <p class="text-lg font-semibold text-white">${summary.openPositionsCount}</p>
+                            </div>
+                        </div>
+
+                        <!-- Coin Details -->
+                        <div class="px-4 pb-4">
+                            <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Coin Details (${coinDetails.length})</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                ${coinDetails.map(coin => `
+                                    <div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                                        <!-- Coin Header -->
+                                        <div class="flex items-center justify-between mb-3">
+                                            <div class="flex items-center space-x-2">
+                                                <div class="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center">
+                                                    <span class="text-xs font-bold text-white">${coin.coin}</span>
+                                                </div>
+                                                <h4 class="font-semibold text-white">${coin.coin}</h4>
+                                            </div>
+                                            <span class="text-xs px-2 py-1 rounded bg-blue-600 text-blue-100">${coin.accountType}</span>
+                                        </div>
+
+                                        <!-- Coin Details -->
+                                        <div class="space-y-3">
+                                            <div class="flex justify-between items-center">
+                                                <span class="text-xs text-gray-400 uppercase">Wallet Balance</span>
+                                                <span class="text-sm font-medium text-white">${coin.walletBalance.toLocaleString()}</span>
+                                            </div>
+                                            <div class="flex justify-between items-center">
+                                                <span class="text-xs text-gray-400 uppercase">Equity</span>
+                                                <span class="text-sm font-medium text-white">${coin.equity.toLocaleString()}</span>
+                                            </div>
+                                            <div class="flex justify-between items-center">
+                                                <span class="text-xs text-gray-400 uppercase">Unrealized PnL</span>
+                                                <span class="text-sm font-medium ${coin.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                                    ${coin.unrealizedPnl >= 0 ? '+' : ''}${coin.unrealizedPnl.toLocaleString()}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Account Type Detail -->
+                                        <div class="mt-3 pt-3 border-t border-gray-600">
+                                            <span class="text-xs text-gray-500">${coin.accountType}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Positions Info -->
+                        ${data.positions.length === 0 ? `
+                            <div class="px-4 pb-4">
+                                <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Positions</h3>
+                                <div class="bg-gray-700 rounded-lg p-4 text-center">
+                                    <p class="text-gray-400">No open positions</p>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            return modal;
+        }
+
+        // Main Account Earning modal oluştur
+        function createMainAccountEarningModal(data) {
+            const summary = data.summary;
+            const positions = data.positions;
+
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 transition-opacity duration-300';
+
+            modal.innerHTML = `
+                <div class="modal-content bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transform scale-95 transition-transform duration-300">
+                    <!-- Header -->
+                    <div class="bg-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
+                        <h2 class="text-lg font-semibold text-white">Main Account Earnings</h2>
+                        <button onclick="closeModal(this)" class="text-gray-400 hover:text-white">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Content -->
+                    <div class="overflow-y-auto max-h-[calc(90vh-80px)]">
+                        <!-- Summary Cards -->
+                        <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <p class="text-xs text-gray-400 uppercase">Total Earnings</p>
+                                <p class="text-2xl font-bold text-green-400">$${summary.totalEarnings.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <p class="text-xs text-gray-400 uppercase">Total Staked</p>
+                                <p class="text-2xl font-bold text-white">$${summary.totalStaked.toLocaleString()}</p>
+                            </div>
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <p class="text-xs text-gray-400 uppercase">Positions Count</p>
+                                <p class="text-2xl font-bold text-white">${summary.positionsCount}</p>
+                            </div>
+                        </div>
+
+                        <!-- APY Calculation -->
+                        <div class="px-4 pb-4">
+                            <div class="bg-gray-700 rounded-lg p-4">
+                                <p class="text-xs text-gray-400 uppercase mb-2">Estimated APY</p>
+                                <p class="text-xl font-semibold text-blue-400">
+                                    ${((summary.totalEarnings / summary.totalStaked) * 100).toFixed(4)}%
+                                </p>
+                                <p class="text-xs text-gray-500 mt-1">Based on current earnings vs staked amount</p>
+                            </div>
+                        </div>
+
+                        <!-- Earning Positions -->
+                        <div class="px-4 pb-4">
+                            <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Earning Positions (${positions.length})</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                ${positions.map(pos => `
+                                    <div class="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                                        <!-- Position Header -->
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div class="flex items-center space-x-3">
+                                                <div class="w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center">
+                                                    <span class="text-sm font-bold text-white">${pos.coin}</span>
+                                                </div>
+                                                <div>
+                                                    <h4 class="font-semibold text-white">${pos.coin}</h4>
+                                                    <p class="text-xs text-gray-400">${pos.currency}</p>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col items-end space-y-1">
+                                                <span class="text-xs px-2 py-1 rounded bg-gray-600 text-gray-300">ID: ${pos.productId}</span>
+                                                ${pos.status ? `<span class="text-xs px-2 py-1 rounded bg-blue-600 text-blue-100">${pos.status}</span>` : '<span class="text-xs px-2 py-1 rounded bg-green-600 text-green-100">Active</span>'}
+                                            </div>
+                                        </div>
+
+                                        <!-- Amount Section -->
+                                        <div class="mb-4 p-3 bg-gray-600 rounded-lg">
+                                            <p class="text-xs text-gray-400 uppercase mb-1">Staked Amount</p>
+                                            <p class="text-xl font-bold text-white">${pos.amount.toLocaleString()} ${pos.currency}</p>
+                                        </div>
+
+                                        <!-- Earnings Grid -->
+                                        <div class="grid grid-cols-3 gap-3">
+                                            <div class="text-center">
+                                                <p class="text-xs text-gray-400 uppercase mb-1">Total PnL</p>
+                                                <p class="text-sm font-semibold ${pos.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                                    ${pos.totalPnl >= 0 ? '+' : ''}$${pos.totalPnl.toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <div class="text-center">
+                                                <p class="text-xs text-gray-400 uppercase mb-1">Claimable</p>
+                                                <p class="text-sm font-semibold text-yellow-400">
+                                                    $${pos.claimableYield.toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <div class="text-center">
+                                                <p class="text-xs text-gray-400 uppercase mb-1">Total Earning</p>
+                                                <p class="text-sm font-semibold text-green-400">
+                                                    $${pos.earning.toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Yield Percentage -->
+                                        <div class="mt-4 pt-3 border-t border-gray-600">
+                                            <div class="flex justify-between items-center">
+                                                <span class="text-xs text-gray-400 uppercase">Yield Rate</span>
+                                                <span class="text-sm font-medium text-blue-400">
+                                                    ${((pos.earning / pos.amount) * 100).toFixed(4)}%
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Earnings Breakdown -->
+                        <div class="px-4 pb-4">
+                            <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Earnings Breakdown</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-gray-700 rounded-lg p-3">
+                                    <p class="text-xs text-gray-400 uppercase">Total PnL</p>
+                                    <p class="text-lg font-semibold ${positions.reduce((sum, pos) => sum + pos.totalPnl, 0) >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                        $${positions.reduce((sum, pos) => sum + pos.totalPnl, 0).toLocaleString()}
+                                    </p>
+                                </div>
+                                <div class="bg-gray-700 rounded-lg p-3">
+                                    <p class="text-xs text-gray-400 uppercase">Claimable Yield</p>
+                                    <p class="text-lg font-semibold text-yellow-400">
+                                        $${positions.reduce((sum, pos) => sum + pos.claimableYield, 0).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return modal;
+        }
+
+        // Modal kapat
+        function closeModal(button) {
+            const modal = button.closest('.fixed');
+            modal.classList.add('opacity-0');
+            modal.querySelector('.modal-content').classList.remove('scale-100');
+            modal.querySelector('.modal-content').classList.add('scale-95');
+
+            setTimeout(() => {
+                modal.remove();
+            }, 300);
+        }
+
+        // Modal dışına tıklayınca kapat
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('fixed') && e.target.classList.contains('bg-black')) {
+                closeModal(e.target.querySelector('button'));
+            }
+        });
+    </script>
+    <!-- Header -->
+    <div class="bg-gray-900 shadow-sm border-b border-gray-700">
+        <div class="flex items-center justify-center p-4">
+            <h1 class="text-lg font-semibold text-white">Ayarlar</h1>
+        </div>
+    </div>
+
+    <!-- Settings Content -->
+    <div class="p-4 space-y-6">
+        <!-- Position Value Threshold Form -->
+        <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
+            <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wide">Alarm Ayarları</h2>
+                <!-- Status Indicator -->
+                <div class="flex flex-col items-end space-y-1">
+                    <div class="flex items-center space-x-2">
+                        <div id="statusIndicator" class="w-3 h-3 rounded-full bg-gray-500 transition-all duration-300"></div>
+                        <span id="statusText" class="text-xs text-gray-400">Bekleniyor...</span>
+                    </div>
+                    <div id="uptimeText" class="text-xs text-gray-500">--:--:--:--</div>
+                </div>
+            </div>
+
+            <div class="p-4">
+                <form class="space-y-4">
+                    <div>
+                        <label for="positionThreshold" class="block text-sm font-medium text-gray-300 mb-2">
+                            Position Value Threshold
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="number"
+                                id="positionThreshold"
+                                name="positionThreshold"
+                                placeholder="0.00"
+                                step="0.01"
+                                min="0"
+                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl text-lg font-medium text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all duration-200 appearance-none"
+                                style="-webkit-appearance: none; -moz-appearance: textfield;"
+                            >
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                                <span class="text-gray-400 font-medium">USDT</span>
+                            </div>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-400">
+                            Minimum pozisyon değeri eşiği belirleyiniz
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="imThreshold" class="block text-sm font-medium text-gray-300 mb-2">
+                            IM Threshold
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="number"
+                                id="imThreshold"
+                                name="imThreshold"
+                                placeholder="0.00"
+                                step="0.01"
+                                min="0"
+                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl text-lg font-medium text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all duration-200 appearance-none"
+                                style="-webkit-appearance: none; -moz-appearance: textfield;"
+                            >
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                                <span class="text-gray-400 font-medium">USDT</span>
+                            </div>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-400">
+                            Initial Margin eşik değerini belirleyiniz
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="interval" class="block text-sm font-medium text-gray-300 mb-2">
+                            Interval
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="number"
+                                id="interval"
+                                name="interval"
+                                placeholder="60000"
+                                step="1"
+                                min="1"
+                                class="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl text-lg font-medium text-white placeholder-gray-400 focus:bg-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all duration-200 appearance-none"
+                                style="-webkit-appearance: none; -moz-appearance: textfield;"
+                            >
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                                <span class="text-gray-400 font-medium">ms</span>
+                            </div>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-400">
+                            Alarm kontrol aralığını belirleyiniz
+                        </p>
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="w-full bg-blue-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all duration-200 active:scale-[0.98]"
+                        id="saveButton"
+                    >
+                        Kaydet
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Account Actions -->
+        <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
+            <div class="p-4 border-b border-gray-700">
+                <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wide">Hesap İşlemleri</h2>
+            </div>
+
+            <!-- Subaccount Summary -->
+            <div class="border-b border-gray-700 last:border-b-0">
+                <button data-action="subaccount-summary" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-blue-900 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-medium text-white">Subaccount Summary</h3>
+                            <p class="text-sm text-gray-400">Alt hesap özeti</p>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Main Account Summary -->
+            <div class="border-b border-gray-700 last:border-b-0">
+                <button data-action="main-account-summary" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-green-900 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2v0a2 2 0 002-2h14a2 2 0 012 2v0"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-medium text-white">Main Account Summary</h3>
+                            <p class="text-sm text-gray-400">Ana hesap özeti</p>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Main Account Earning -->
+            <div class="border-b border-gray-700 last:border-b-0">
+                <button data-action="main-account-earning" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-purple-900 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-medium text-white">Main Account Earning</h3>
+                            <p class="text-sm text-gray-400">Ana hesap kazançları</p>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

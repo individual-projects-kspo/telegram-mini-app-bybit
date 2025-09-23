@@ -3,10 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ayarlar</title>
+    <title>Bot Ayarları</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body class="bg-gray-900 min-h-screen">
+    <script>
+        // Telegram Web App initialization
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+
+            // Expand the app to fullscreen
+            tg.expand();
+
+            // Enable fullscreen mode
+            tg.enableFullscreen();
+
+            // Set header color to match app theme
+            tg.setHeaderColor('#111827'); // gray-900
+
+            // Show the app as ready
+            tg.ready();
+        }
+    </script>
     <script>
         // API'den ayarları çek ve formu doldur
         async function loadSettings() {
@@ -298,10 +317,10 @@
             const positions = data.positions;
 
             const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 transition-opacity duration-300';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 opacity-0 transition-opacity duration-300';
 
             modal.innerHTML = `
-                <div class="modal-content bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transform scale-95 transition-transform duration-300">
+                <div class="modal-content bg-gray-800 rounded-lg w-full h-full overflow-hidden transform scale-95 transition-transform duration-300">
                     <!-- Header -->
                     <div class="bg-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-white">Subaccount Summary</h2>
@@ -313,7 +332,7 @@
                     </div>
 
                     <!-- Content -->
-                    <div class="overflow-y-auto max-h-[calc(90vh-80px)]">
+                    <div class="overflow-y-auto h-full">
                         <!-- Summary Cards -->
                         <div class="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                             <div class="bg-gray-700 rounded-lg p-3">
@@ -442,10 +461,10 @@
             const coinDetails = data.coinDetails;
 
             const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 transition-opacity duration-300';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 opacity-0 transition-opacity duration-300';
 
             modal.innerHTML = `
-                <div class="modal-content bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transform scale-95 transition-transform duration-300">
+                <div class="modal-content bg-gray-800 rounded-lg w-full h-full overflow-hidden transform scale-95 transition-transform duration-300">
                     <!-- Header -->
                     <div class="bg-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-white">Main Account Summary</h2>
@@ -457,7 +476,7 @@
                     </div>
 
                     <!-- Content -->
-                    <div class="overflow-y-auto max-h-[calc(90vh-80px)]">
+                    <div class="overflow-y-auto h-full">
                         <!-- Account Type -->
                         <div class="p-4 border-b border-gray-700">
                             <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Account Type</h3>
@@ -574,10 +593,10 @@
             const positions = data.positions;
 
             const modal = document.createElement('div');
-            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 opacity-0 transition-opacity duration-300';
+            modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 opacity-0 transition-opacity duration-300';
 
             modal.innerHTML = `
-                <div class="modal-content bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden transform scale-95 transition-transform duration-300">
+                <div class="modal-content bg-gray-800 rounded-lg w-full h-full overflow-hidden transform scale-95 transition-transform duration-300">
                     <!-- Header -->
                     <div class="bg-gray-900 p-4 border-b border-gray-700 flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-white">Main Account Earnings</h2>
@@ -589,7 +608,7 @@
                     </div>
 
                     <!-- Content -->
-                    <div class="overflow-y-auto max-h-[calc(90vh-80px)]">
+                    <div class="overflow-y-auto h-full">
                         <!-- Summary Cards -->
                         <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div class="bg-gray-700 rounded-lg p-4">
@@ -728,8 +747,8 @@
     </script>
     <!-- Header -->
     <div class="bg-gray-900 shadow-sm border-b border-gray-700">
-        <div class="flex items-center justify-center p-4">
-            <h1 class="text-lg font-semibold text-white">Ayarlar</h1>
+        <div class="flex items-center justify-center py-6">
+            <h1 class="text-xl font-semibold text-white">Bot Ayarları</h1>
         </div>
     </div>
 
@@ -902,5 +921,8 @@
         </div>
 
     </div>
+
+    <!-- Bottom spacing -->
+    <div class="h-32"></div>
 </body>
 </html>

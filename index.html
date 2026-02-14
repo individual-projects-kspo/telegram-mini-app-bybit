@@ -510,37 +510,38 @@
                         <!-- Positions -->
                         <div class="px-4 pb-4">
                             <h3 class="text-sm font-medium text-gray-400 uppercase mb-2">Open Positions (${positions.length})</h3>
+                            ${(() => {
+                                const positivePositions = positions.filter(p => p.unrealizedPnl > 0);
+                                const negativePositions = positions.filter(p => p.unrealizedPnl < 0);
+                                const totalPositivePnl = positivePositions.reduce((s, p) => s + p.unrealizedPnl, 0);
+                                const totalNegativePnl = negativePositions.reduce((s, p) => s + p.unrealizedPnl, 0);
+                                return `<p class="text-xs text-gray-400 mb-2">Anlık kâr <span class="text-green-400 font-medium">+${totalPositivePnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> USDT <span class="text-gray-500 font-medium">(${positivePositions.length} poz)</span> — Anlık zarar <span class="text-red-400 font-medium">${totalNegativePnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> USDT <span class="text-gray-500 font-medium">(${negativePositions.length} poz)</span></p>`;
+                            })()}
                             <div class="bg-gray-700 rounded-lg overflow-hidden">
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-sm">
                                         <thead class="bg-gray-600">
                                             <tr>
                                                 <th class="text-left p-3 text-gray-300">Symbol</th>
-                                                <th class="text-right p-3 text-gray-300">Side</th>
-                                                <th class="text-right p-3 text-gray-300">Size</th>
-                                                <th class="text-right p-3 text-gray-300">Entry Price</th>
-                                                <th class="text-right p-3 text-gray-300">Value</th>
-                                                <th class="text-right p-3 text-gray-300">PnL</th>
-                                                <th class="text-right p-3 text-gray-300">%</th>
+                                                <th class="text-right p-3 text-gray-300">Size/Price</th>
+                                                <th class="text-right p-3 text-gray-300"><span class="positions-sort cursor-pointer hover:text-white select-none inline-flex items-center gap-0.5" data-sort="value" title="Value'a göre sırala">Value <span class="positions-sort-arrow text-gray-500">↕</span></span></th>
+                                                <th class="text-right p-3 text-gray-300"><span class="positions-sort cursor-pointer hover:text-white select-none inline-flex items-center gap-0.5" data-sort="pnl" title="PnL'e göre sırala">PnL <span class="positions-sort-arrow text-gray-500">↕</span></span> / <span class="positions-sort cursor-pointer hover:text-white select-none inline-flex items-center gap-0.5" data-sort="percentage" title="Yüzdeye göre sırala">% <span class="positions-sort-arrow text-gray-500">↕</span></span></th>
                                             </tr>
                                         </thead>
-                                        <tbody class="divide-y divide-gray-600">
-                                            ${positions.map(pos => `
+                                        <tbody class="positions-tbody divide-y divide-gray-600 font-mono">
+                                            ${[...positions].sort((a, b) => b.unrealizedPnl - a.unrealizedPnl).map(pos => `
                                                 <tr class="hover:bg-gray-600">
-                                                    <td class="p-3 text-white font-medium">${pos.symbol}</td>
-                                                    <td class="p-3 text-right">
-                                                        <span class="text-xs px-2 py-1 rounded ${pos.side === 'Buy' ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
+                                                    <td class="p-1.5 text-white font-medium text-xs">${pos.symbol} </br>
+                                                        <span class="text-xs px-1 py-0.5 rounded ${pos.side === 'Buy' ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
                                                             ${pos.side}
+                                                        </span></td>
+                                                    <td class="p-1.5 text-right text-gray-300">${pos.size.toLocaleString() + ' ' + pos.symbol.replace('USDT', '')}</br>${pos.entryPrice.toFixed(6)} USDT</td>
+                                                    <td class="p-1.5 text-right text-gray-300">${pos.positionValue.toLocaleString()} USDT</td>
+                                                    <td class="p-1.5 text-right font-medium ${pos.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                                        ${pos.unrealizedPnl.toLocaleString()} USDT </br>
+                                                        <span class="text-xs px-1 py-0.5 rounded ${pos.unrealizedPnl >= 0 ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
+                                                            ${pos.percentage.toFixed(2)}%
                                                         </span>
-                                                    </td>
-                                                    <td class="p-3 text-right text-gray-300">${pos.size.toLocaleString()}</td>
-                                                    <td class="p-3 text-right text-gray-300">$${pos.entryPrice.toFixed(6)}</td>
-                                                    <td class="p-3 text-right text-gray-300">$${pos.positionValue.toLocaleString()}</td>
-                                                    <td class="p-3 text-right font-medium ${pos.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
-                                                        $${pos.unrealizedPnl.toLocaleString()}
-                                                    </td>
-                                                    <td class="p-3 text-right font-medium ${pos.percentage >= 0 ? 'text-green-400' : 'text-red-400'}">
-                                                        ${pos.percentage.toFixed(2)}%
                                                     </td>
                                                 </tr>
                                             `).join('')}
@@ -552,6 +553,49 @@
                     </div>
                 </div>
             `;
+
+            // Positions tablosu için sort (value, pnl, percentage)
+            const positionsTbody = modal.querySelector('.positions-tbody');
+            const sortSpans = modal.querySelectorAll('.positions-sort');
+            let positionsSortState = { key: 'pnl', order: -1 };
+
+            function positionRowHtml(pos) {
+                return `
+                                                <tr class="hover:bg-gray-600">
+                                                    <td class="p-1.5 text-white font-medium text-xs">${pos.symbol} </br>
+                                                        <span class="text-xs px-1 py-0.5 rounded ${pos.side === 'Buy' ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
+                                                            ${pos.side}
+                                                        </span></td>
+                                                    <td class="p-1.5 text-right text-gray-300">${pos.size.toLocaleString() + ' ' + pos.symbol.replace('USDT', '')}</br>${pos.entryPrice.toFixed(6)} USDT</td>
+                                                    <td class="p-1.5 text-right text-gray-300">${pos.positionValue.toLocaleString()} USDT</td>
+                                                    <td class="p-1.5 text-right font-medium ${pos.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
+                                                        ${pos.unrealizedPnl.toLocaleString()} USDT </br>
+                                                        <span class="text-xs px-1 py-0.5 rounded ${pos.unrealizedPnl >= 0 ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
+                                                            ${pos.percentage.toFixed(2)}%
+                                                        </span>
+                                                    </td>
+                                                </tr>`;
+            }
+
+            function renderPositionsBody(sortedPositions) {
+                return sortedPositions.map(positionRowHtml).join('');
+            }
+
+            sortSpans.forEach(span => {
+                span.addEventListener('click', () => {
+                    const key = span.dataset.sort;
+                    if (positionsSortState.key === key) positionsSortState.order *= -1;
+                    else { positionsSortState.key = key; positionsSortState.order = -1; }
+                    const sorted = [...positions].sort((a, b) => {
+                        let va, vb;
+                        if (key === 'value') { va = a.positionValue; vb = b.positionValue; }
+                        else if (key === 'pnl') { va = a.unrealizedPnl; vb = b.unrealizedPnl; }
+                        else { va = a.percentage; vb = b.percentage; }
+                        return (vb - va) * positionsSortState.order;
+                    });
+                    positionsTbody.innerHTML = renderPositionsBody(sorted);
+                });
+            });
 
             return modal;
         }
@@ -863,6 +907,72 @@
 
     <!-- Settings Content -->
     <div class="content-safe space-y-6">
+        <!-- Account Actions -->
+        <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
+            <div class="p-4 border-b border-gray-700">
+                <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wide">Hesap İşlemleri</h2>
+            </div>
+
+            <!-- Subaccount Summary -->
+            <div class="border-b border-gray-700 last:border-b-0">
+                <button data-action="subaccount-summary" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-blue-900 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-medium text-white">Subaccount Summary</h3>
+                            <p class="text-sm text-gray-400">Alt hesap özeti</p>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Main Account Summary -->
+            <div class="border-b border-gray-700 last:border-b-0">
+                <button data-action="main-account-summary" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-green-900 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2v0a2 2 0 002-2h14a2 2 0 012 2v0"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-medium text-white">Main Account Summary</h3>
+                            <p class="text-sm text-gray-400">Ana hesap özeti</p>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Main Account Earning -->
+            <div class="border-b border-gray-700 last:border-b-0">
+                <button data-action="main-account-earning" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 bg-purple-900 rounded-lg flex items-center justify-center">
+                            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                            </svg>
+                        </div>
+                        <div class="text-left">
+                            <h3 class="font-medium text-white">Main Account Earning</h3>
+                            <p class="text-sm text-gray-400">Ana hesap kazançları</p>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
         <!-- Position Value Threshold Form -->
         <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
             <div class="p-4 border-b border-gray-700 flex items-center justify-between">
@@ -961,74 +1071,6 @@
                 </form>
             </div>
         </div>
-
-        <!-- Account Actions -->
-        <div class="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
-            <div class="p-4 border-b border-gray-700">
-                <h2 class="text-sm font-medium text-gray-400 uppercase tracking-wide">Hesap İşlemleri</h2>
-            </div>
-
-            <!-- Subaccount Summary -->
-            <div class="border-b border-gray-700 last:border-b-0">
-                <button data-action="subaccount-summary" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 bg-blue-900 rounded-lg flex items-center justify-center">
-                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
-                            </svg>
-                        </div>
-                        <div class="text-left">
-                            <h3 class="font-medium text-white">Subaccount Summary</h3>
-                            <p class="text-sm text-gray-400">Alt hesap özeti</p>
-                        </div>
-                    </div>
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Main Account Summary -->
-            <div class="border-b border-gray-700 last:border-b-0">
-                <button data-action="main-account-summary" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 bg-green-900 rounded-lg flex items-center justify-center">
-                            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2v0a2 2 0 002-2h14a2 2 0 012 2v0"></path>
-                            </svg>
-                        </div>
-                        <div class="text-left">
-                            <h3 class="font-medium text-white">Main Account Summary</h3>
-                            <p class="text-sm text-gray-400">Ana hesap özeti</p>
-                        </div>
-                    </div>
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                </button>
-            </div>
-
-            <!-- Main Account Earning -->
-            <div class="border-b border-gray-700 last:border-b-0">
-                <button data-action="main-account-earning" class="w-full p-4 flex items-center justify-between hover:bg-gray-700 active:bg-gray-600 transition-colors">
-                    <div class="flex items-center space-x-3">
-                        <div class="w-8 h-8 bg-purple-900 rounded-lg flex items-center justify-center">
-                            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-                            </svg>
-                        </div>
-                        <div class="text-left">
-                            <h3 class="font-medium text-white">Main Account Earning</h3>
-                            <p class="text-sm text-gray-400">Ana hesap kazançları</p>
-                        </div>
-                    </div>
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-
     </div>
 
     <!-- Bottom spacing -->

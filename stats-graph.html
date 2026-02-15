@@ -6,9 +6,7 @@
     <title>Stats Grafik</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; overflow-x: hidden; background: #111827; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
@@ -17,9 +15,7 @@
       .header-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
       .content-safe { padding: max(1rem, env(safe-area-inset-left)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
       input[type="date"] { min-height: 44px; -webkit-appearance: none; appearance: none; }
-      .chart-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
-      .chart-scroll::-webkit-scrollbar { display: none; }
-      .chart-wrap { position: relative; height: 220px; min-height: 220px; }
+      .chart-container { height: 220px; width: 100%; position: relative; }
     </style>
   </head>
   <body class="bg-gray-900 text-white min-h-full">
@@ -32,7 +28,7 @@
         tg.ready();
       }
     </script>
-    <header class="bg-gray-900 border-b border-gray-700 header-safe sticky top-0 z-10">
+    <header class="bg-gray-900 border-b border-gray-700 header-safe">
       <div class="content-safe relative flex items-center py-6">
         <a href="subaccount-stats.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors z-10">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
@@ -56,7 +52,7 @@
         <button type="button" id="graph-fetch" class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg text-white font-medium text-sm touch-manipulation select-none">
           Grafiği Güncelle
         </button>
-        <p class="text-xs text-gray-500 mt-2">Aralık en fazla 10 gün</p>
+        <p class="text-xs text-gray-500 mt-2">Aralık en fazla 10 gün · Zoom/scroll: tekerlek veya pinch, kaydır: sürükle</p>
       </div>
       <div id="charts-container" class="space-y-6"></div>
     </main>
@@ -65,6 +61,11 @@
       const MAX_RANGE_DAYS = 10;
       const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#22d3ee"];
       let chartInstances = [];
+
+      const LWC = window.LightweightCharts;
+      if (!LWC) {
+        document.getElementById("charts-container").innerHTML = '<p class="text-red-400 text-center py-4">Lightweight Charts yüklenemedi.</p>';
+      }
 
       function toLocalDateStr(d) {
         const y = d.getFullYear();
@@ -80,11 +81,8 @@
         return null;
       }
 
-      function formatLabel(dateStr) {
-        try {
-          const d = new Date(dateStr);
-          return isNaN(d.getTime()) ? dateStr : d.toLocaleString("tr-TR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-        } catch (_) { return dateStr; }
+      function toUTCTimestamp(dateStr) {
+        return Math.floor(new Date(dateStr).getTime() / 1000);
       }
 
       const SERIES = [
@@ -96,68 +94,54 @@
         { key: "usdtBalance.walletBalance", label: "Wallet Balance" },
       ];
 
+      const darkOptions = {
+        layout: {
+          background: { type: "solid", color: "#1f2937" },
+          textColor: "#9ca3af",
+        },
+        grid: {
+          vertLines: { color: "#374151" },
+          horzLines: { color: "#374151" },
+        },
+        rightPriceScale: {
+          borderColor: "#4b5563",
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+        timeScale: {
+          borderColor: "#4b5563",
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        crosshair: {
+          vertLine: { color: "#6b7280" },
+          horzLine: { color: "#6b7280" },
+        },
+      };
+
       function destroyCharts() {
-        chartInstances.forEach(c => { if (c) c.destroy(); });
+        chartInstances.forEach((c) => {
+          if (c && c.remove) c.remove();
+        });
         chartInstances = [];
       }
 
-      function createChart(canvasId, label, labels, values, isInteger) {
-        const ctx = document.getElementById(canvasId).getContext("2d");
-        const color = CHART_COLORS[chartInstances.length % CHART_COLORS.length];
-        const n = values.length;
-        const chart = new Chart(ctx, {
-          type: "line",
-          data: {
-            labels: labels,
-            datasets: [{
-              label: label,
-              data: values,
-              borderColor: color,
-              backgroundColor: color + "20",
-              fill: true,
-              tension: 0.2,
-              pointRadius: n > 200 ? 0 : 2,
-              pointHoverRadius: 4,
-            }],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { display: false },
-              zoom: {
-                zoom: {
-                  wheel: { enabled: true },
-                  pinch: { enabled: true },
-                  mode: "x",
-                },
-                pan: {
-                  enabled: true,
-                  mode: "x",
-                },
-                limits: {
-                  x: { min: "original", max: "original" },
-                },
-              },
-            },
-            scales: {
-              x: {
-                grid: { color: "#374151" },
-                ticks: { color: "#9ca3af", maxRotation: 45, maxTicksLimit: 12 },
-              },
-              y: {
-                grid: { color: "#374151" },
-                ticks: {
-                  color: "#9ca3af",
-                  callback: function(v) {
-                    if (isInteger) return Math.round(v);
-                    return Number(v).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
-                  },
-                },
-              },
-            },
+      function createChart(containerEl, label, data, color, isInteger) {
+        const chart = LWC.createChart(containerEl, {
+          width: containerEl.clientWidth,
+          height: 220,
+          ...darkOptions,
+        });
+        const series = chart.addLineSeries({
+          color: color,
+          lineWidth: 2,
+          priceFormat: {
+            type: "price",
+            precision: isInteger ? 0 : 2,
+            minMove: isInteger ? 1 : 0.01,
           },
         });
+        series.setData(data);
+        chart.timeScale().fitContent();
         chartInstances.push(chart);
         return chart;
       }
@@ -165,27 +149,40 @@
       function renderCharts(snapshots) {
         destroyCharts();
         const container = document.getElementById("charts-container");
+        if (!LWC) return;
         if (!snapshots.length) {
           container.innerHTML = '<p class="text-gray-400 text-center py-8">Veri yok. Tarih seçip "Grafiği Güncelle" ile yükleyin.</p>';
           return;
         }
-        const labels = snapshots.map(s => formatLabel(getValue(s, "created_at")));
-        const minChartWidth = Math.max(400, Math.min(12000, snapshots.length * 3));
+        const isIntegerKey = "summary.openPositionsCount";
         let html = "";
         SERIES.forEach((serie, i) => {
-          const id = "chart-" + i;
-          html += '<div class="bg-gray-800/60 border border-gray-600 rounded-lg p-3"><p class="text-xs text-gray-400 mb-2">' + serie.label + ' · Fare tekerleği/pinch ile zoom, sürükleyerek kaydır</p><div class="chart-scroll"><div class="chart-wrap" style="min-width:' + minChartWidth + 'px"><canvas id="' + id + '"></canvas></div></div></div>';
+          const id = "chart-div-" + i;
+          html += '<div class="bg-gray-800/60 border border-gray-600 rounded-lg p-3"><p class="text-xs text-gray-400 mb-2">' + serie.label + '</p><div id="' + id + '" class="chart-container"></div></div>';
         });
         container.innerHTML = html;
-        const isIntegerKey = "summary.openPositionsCount";
+
         SERIES.forEach((serie, i) => {
-          const values = snapshots.map(s => {
-            const v = getValue(s, serie.key);
-            return v == null ? null : (serie.key === isIntegerKey ? Math.round(Number(v)) : Number(v));
-          });
-          createChart("chart-" + i, serie.label, labels, values, serie.key === isIntegerKey);
+          const data = snapshots
+            .map((s) => {
+              const t = getValue(s, "created_at");
+              const v = getValue(s, serie.key);
+              if (t == null || v == null) return null;
+              const val = serie.key === isIntegerKey ? Math.round(Number(v)) : Number(v);
+              return { time: toUTCTimestamp(t), value: val };
+            })
+            .filter((x) => x !== null);
+          const div = document.getElementById("chart-div-" + i);
+          if (div && data.length) createChart(div, serie.label, data, CHART_COLORS[i % CHART_COLORS.length], serie.key === isIntegerKey);
         });
       }
+
+      window.addEventListener("resize", () => {
+        chartInstances.forEach((chart, i) => {
+          const el = document.getElementById("chart-div-" + i);
+          if (chart && el && el.clientWidth) chart.applyOptions({ width: el.clientWidth });
+        });
+      });
 
       async function fetchAndRender(fromVal, toVal) {
         const btn = document.getElementById("graph-fetch");
@@ -203,7 +200,18 @@
         btn.textContent = "Yükleniyor...";
         try {
           const res = await fetch(url);
-          const data = await res.json();
+          const text = await res.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (_) {
+            alert("Sunucu yanıtı okunamadı (" + res.status + "). " + (text.slice(0, 80) || res.statusText));
+            return;
+          }
+          if (!res.ok) {
+            alert(data?.error || data?.message || "Hata " + res.status);
+            return;
+          }
           if (!data.success) {
             alert(data.error || "Veri alınamadı");
             return;
@@ -211,7 +219,9 @@
           const list = data.data || [];
           renderCharts(list);
         } catch (e) {
-          alert("İstek başarısız.");
+          const msg = e?.message || String(e);
+          console.error("Stats graph fetch error:", e);
+          alert("İstek başarısız: " + (msg || "Bilinmeyen hata. Konsolu kontrol edin."));
         } finally {
           btn.disabled = false;
           btn.textContent = "Grafiği Güncelle";
@@ -229,7 +239,7 @@
       const fromDate = new Date(now.getTime() - MAX_RANGE_DAYS * 24 * 60 * 60 * 1000);
       document.getElementById("graph-from").value = toLocalDateStr(fromDate);
       document.getElementById("graph-to").value = toLocalDateStr(now);
-      fetchAndRender(null, null);
+      if (LWC) fetchAndRender(null, null);
     </script>
   </body>
 </html>

@@ -25,7 +25,7 @@
         tg.ready();
       }
     </script>
-    <header class="bg-gray-900 border-b border-gray-700 header-safe sticky top-0 z-10">
+    <header class="bg-gray-900 border-b border-gray-700 header-safe">
       <div class="content-safe relative flex items-center py-6">
         <a href="index.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors z-10">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
@@ -42,11 +42,12 @@
       const fmt = (n, minF = 2, maxF = 2) => Number(n).toLocaleString("tr-TR", { minimumFractionDigits: minF, maximumFractionDigits: maxF });
 
       function positionRowHtml(pos) {
+        const sym = escapeHtml((pos.symbol || "").replace("USDT", ""));
         return `<tr class="hover:bg-gray-600 border-b border-gray-600">
           <td class="p-2 text-white font-medium text-xs">${escapeHtml(pos.symbol)}<br><span class="text-xs px-1 py-0.5 rounded ${pos.side === "Buy" ? "bg-green-600" : "bg-red-600"}">${escapeHtml(pos.side)}</span></td>
           <td class="p-2 text-right font-medium ${pos.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}">${fmt(pos.unrealizedPnl)} USDT<br><span class="text-xs">${fmt(pos.percentage)}%</span></td>
-          <td class="p-2 text-right text-gray-300">${fmt(pos.positionValue)} USDT</td>
-          <td class="p-2 text-right text-gray-300">${fmt(pos.size, 2, 6)} ${escapeHtml((pos.symbol || "").replace("USDT", ""))}<br>${fmt(pos.entryPrice, 6, 6)} USDT</td>
+          <td class="p-2 text-right text-gray-300 whitespace-nowrap">${fmt(pos.positionValue)} USDT</td>
+          <td class="p-2 text-right text-gray-300">${fmt(pos.size, 2, 6)} ${sym}<br><span class="text-xs">${fmt(pos.entryPrice, 6, 6)} USDT</span></td>
         </tr>`;
       }
 
@@ -77,28 +78,28 @@
           el.innerHTML = `
             <div class="space-y-4">
               <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Total Equity</p><p class="text-lg font-semibold">$${Number(summary.totalEquity).toLocaleString()}</p></div>
-                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Available Balance</p><p class="text-lg font-semibold">$${Number(summary.availableBalance).toLocaleString()}</p></div>
-                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Margin Balance</p><p class="text-lg font-semibold">$${Number(summary.marginBalance).toLocaleString()}</p></div>
-                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Unrealized PnL</p><p class="text-lg font-semibold ${summary.unrealizedPnL >= 0 ? "text-green-400" : "text-red-400"}">$${Number(summary.unrealizedPnL).toLocaleString()}</p></div>
-                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Open Positions</p><p class="text-lg font-semibold">${summary.openPositionsCount ?? 0}</p></div>
-                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Total Position Value</p><p class="text-lg font-semibold">$${Number(summary.totalPositionValue).toLocaleString()}</p></div>
+                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Total Equity</p><p class="text-lg font-semibold whitespace-nowrap">$${Number(summary.totalEquity).toLocaleString()}</p></div>
+                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Available Balance</p><p class="text-lg font-semibold whitespace-nowrap">$${Number(summary.availableBalance).toLocaleString()}</p></div>
+                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Margin Balance</p><p class="text-lg font-semibold whitespace-nowrap">$${Number(summary.marginBalance).toLocaleString()}</p></div>
+                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Unrealized PnL</p><p class="text-lg font-semibold whitespace-nowrap ${summary.unrealizedPnL >= 0 ? "text-green-400" : "text-red-400"}">$${Number(summary.unrealizedPnL).toLocaleString()}</p></div>
+                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Open Positions</p><p class="text-lg font-semibold whitespace-nowrap">${summary.openPositionsCount ?? 0}</p></div>
+                <div class="bg-gray-700 rounded-lg p-3"><p class="text-xs text-gray-400 uppercase">Total Position Value</p><p class="text-lg font-semibold whitespace-nowrap">$${Number(summary.totalPositionValue).toLocaleString()}</p></div>
               </div>
               <div>
                 <h3 class="text-sm text-gray-400 uppercase mb-2">USDT Balance</h3>
                 <div class="bg-gray-700 rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div><p class="text-gray-400">Wallet</p><p class="font-medium">$${Number(usdt.walletBalance).toLocaleString()}</p></div>
-                  <div><p class="text-gray-400">Available</p><p class="font-medium">$${Number(usdt.availableBalance).toLocaleString()}</p></div>
-                  <div><p class="text-gray-400">Unrealized PnL</p><p class="font-medium ${usdt.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}">$${Number(usdt.unrealizedPnl).toLocaleString()}</p></div>
-                  <div><p class="text-gray-400">Equity</p><p class="font-medium">$${Number(usdt.equity).toLocaleString()}</p></div>
+                  <div><p class="text-gray-400">Wallet</p><p class="font-medium whitespace-nowrap">$${Number(usdt.walletBalance).toLocaleString()}</p></div>
+                  <div><p class="text-gray-400">Available</p><p class="font-medium whitespace-nowrap">$${Number(usdt.availableBalance).toLocaleString()}</p></div>
+                  <div><p class="text-gray-400">Unrealized PnL</p><p class="font-medium whitespace-nowrap ${usdt.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}">$${Number(usdt.unrealizedPnl).toLocaleString()}</p></div>
+                  <div><p class="text-gray-400">Equity</p><p class="font-medium whitespace-nowrap">$${Number(usdt.equity).toLocaleString()}</p></div>
                 </div>
               </div>
               <div>
                 <h3 class="text-sm text-gray-400 uppercase mb-2">Open Positions (${positions.length})</h3>
-                <p class="text-xs text-gray-400 mb-2">Anlık kâr <span class="text-green-400">+${fmt(posPos)}</span> USDT · Anlık zarar <span class="text-red-400">${fmt(posNeg)}</span> USDT</p>
+                <p class="text-xs text-gray-400 mb-2 whitespace-nowrap">Anlık kâr <span class="text-green-400">+${fmt(posPos)}</span> USDT · Anlık zarar <span class="text-red-400">${fmt(posNeg)}</span> USDT</p>
                 <div class="bg-gray-700 rounded-lg overflow-x-auto">
                   <table class="w-full text-sm">
-                    <thead class="bg-gray-600"><tr><th class="text-left p-2 text-gray-300">Symbol</th><th class="text-right p-2 text-gray-300">PnL / %</th><th class="text-right p-2 text-gray-300">Value</th><th class="text-right p-2 text-gray-300">Size/Price</th></tr></thead>
+                    <thead class="bg-gray-600"><tr><th class="text-left p-2 text-gray-300 whitespace-nowrap">Symbol</th><th class="text-right p-2 text-gray-300 whitespace-nowrap">PnL / %</th><th class="text-right p-2 text-gray-300 whitespace-nowrap">Value</th><th class="text-right p-2 text-gray-300 whitespace-nowrap">Size/Price</th></tr></thead>
                     <tbody>${posSorted.map(positionRowHtml).join("")}</tbody>
                   </table>
                 </div>

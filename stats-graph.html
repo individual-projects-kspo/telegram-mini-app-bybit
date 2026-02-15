@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Stats Grafik</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow-x: hidden; background: #111827; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      body { -webkit-overflow-scrolling: touch; overscroll-behavior: none; }
+      ::-webkit-scrollbar { display: none; }
+      .header-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+      .content-safe { padding: max(1rem, env(safe-area-inset-left)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+      input[type="date"] { min-height: 44px; -webkit-appearance: none; appearance: none; }
+      .chart-scroll { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+      .chart-scroll::-webkit-scrollbar { display: none; }
+      .chart-wrap { position: relative; height: 220px; min-height: 220px; }
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white min-h-full">
+    <script>
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor("#111827");
+        tg.MainButton.hide();
+        tg.ready();
+      }
+    </script>
+    <header class="bg-gray-900 border-b border-gray-700 header-safe sticky top-0 z-10">
+      <div class="content-safe relative flex items-center py-6">
+        <a href="subaccount-stats.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors z-10">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          <span>Geri</span>
+        </a>
+        <h1 class="absolute left-0 right-0 text-center text-lg font-semibold text-white pointer-events-none">Stats Grafik</h1>
+      </div>
+    </header>
+    <main class="content-safe py-3 overflow-auto" id="main-content">
+      <div class="bg-gray-800/80 border border-gray-600 rounded-xl p-3 mb-3">
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label for="graph-from" class="block text-xs text-gray-400 mb-1">Başlangıç</label>
+            <input type="date" id="graph-from" class="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div>
+            <label for="graph-to" class="block text-xs text-gray-400 mb-1">Bitiş</label>
+            <input type="date" id="graph-to" class="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+        </div>
+        <button type="button" id="graph-fetch" class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg text-white font-medium text-sm touch-manipulation select-none">
+          Grafiği Güncelle
+        </button>
+        <p class="text-xs text-gray-500 mt-2">Aralık en fazla 10 gün</p>
+      </div>
+      <div id="charts-container" class="space-y-6"></div>
+    </main>
+    <script>
+      const API = "https://tracker.vinx.online/api/sub/summary/history";
+      const MAX_RANGE_DAYS = 10;
+      const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#22d3ee"];
+      let chartInstances = [];
+
+      function toLocalDateStr(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return y + "-" + m + "-" + day;
+      }
+
+      function getValue(snap, key) {
+        if (key === "created_at") return snap.created_at;
+        if (key.startsWith("summary.")) return snap.summary?.[key.slice(8)];
+        if (key.startsWith("usdtBalance.")) return snap.usdtBalance?.[key.slice(12)];
+        return null;
+      }
+
+      function formatLabel(dateStr) {
+        try {
+          const d = new Date(dateStr);
+          return isNaN(d.getTime()) ? dateStr : d.toLocaleString("tr-TR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+        } catch (_) { return dateStr; }
+      }
+
+      const SERIES = [
+        { key: "summary.totalEquity", label: "Total Equity" },
+        { key: "summary.availableBalance", label: "Available Balance" },
+        { key: "summary.unrealizedPnL", label: "Unrealized PnL" },
+        { key: "summary.openPositionsCount", label: "Open Positions" },
+        { key: "summary.totalPositionValue", label: "Total Position Value" },
+        { key: "usdtBalance.walletBalance", label: "Wallet Balance" },
+      ];
+
+      function destroyCharts() {
+        chartInstances.forEach(c => { if (c) c.destroy(); });
+        chartInstances = [];
+      }
+
+      function createChart(canvasId, label, labels, values, isInteger) {
+        const ctx = document.getElementById(canvasId).getContext("2d");
+        const color = CHART_COLORS[chartInstances.length % CHART_COLORS.length];
+        const n = values.length;
+        const chart = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [{
+              label: label,
+              data: values,
+              borderColor: color,
+              backgroundColor: color + "20",
+              fill: true,
+              tension: 0.2,
+              pointRadius: n > 200 ? 0 : 2,
+              pointHoverRadius: 4,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              zoom: {
+                zoom: {
+                  wheel: { enabled: true },
+                  pinch: { enabled: true },
+                  mode: "x",
+                },
+                pan: {
+                  enabled: true,
+                  mode: "x",
+                },
+                limits: {
+                  x: { min: "original", max: "original" },
+                },
+              },
+            },
+            scales: {
+              x: {
+                grid: { color: "#374151" },
+                ticks: { color: "#9ca3af", maxRotation: 45, maxTicksLimit: 12 },
+              },
+              y: {
+                grid: { color: "#374151" },
+                ticks: {
+                  color: "#9ca3af",
+                  callback: function(v) {
+                    if (isInteger) return Math.round(v);
+                    return Number(v).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+                  },
+                },
+              },
+            },
+          },
+        });
+        chartInstances.push(chart);
+        return chart;
+      }
+
+      function renderCharts(snapshots) {
+        destroyCharts();
+        const container = document.getElementById("charts-container");
+        if (!snapshots.length) {
+          container.innerHTML = '<p class="text-gray-400 text-center py-8">Veri yok. Tarih seçip "Grafiği Güncelle" ile yükleyin.</p>';
+          return;
+        }
+        const labels = snapshots.map(s => formatLabel(getValue(s, "created_at")));
+        const minChartWidth = Math.max(400, Math.min(12000, snapshots.length * 3));
+        let html = "";
+        SERIES.forEach((serie, i) => {
+          const id = "chart-" + i;
+          html += '<div class="bg-gray-800/60 border border-gray-600 rounded-lg p-3"><p class="text-xs text-gray-400 mb-2">' + serie.label + ' · Fare tekerleği/pinch ile zoom, sürükleyerek kaydır</p><div class="chart-scroll"><div class="chart-wrap" style="min-width:' + minChartWidth + 'px"><canvas id="' + id + '"></canvas></div></div></div>';
+        });
+        container.innerHTML = html;
+        const isIntegerKey = "summary.openPositionsCount";
+        SERIES.forEach((serie, i) => {
+          const values = snapshots.map(s => {
+            const v = getValue(s, serie.key);
+            return v == null ? null : (serie.key === isIntegerKey ? Math.round(Number(v)) : Number(v));
+          });
+          createChart("chart-" + i, serie.label, labels, values, serie.key === isIntegerKey);
+        });
+      }
+
+      async function fetchAndRender(fromVal, toVal) {
+        const btn = document.getElementById("graph-fetch");
+        let url = API;
+        if (fromVal && toVal) {
+          const fromDate = new Date(fromVal);
+          const toDate = new Date(toVal);
+          if (toDate - fromDate > MAX_RANGE_DAYS * 24 * 60 * 60 * 1000) {
+            alert("Aralık en fazla " + MAX_RANGE_DAYS + " gün olabilir.");
+            return;
+          }
+          url += "?from=" + encodeURIComponent(fromVal) + "&to=" + encodeURIComponent(toVal);
+        }
+        btn.disabled = true;
+        btn.textContent = "Yükleniyor...";
+        try {
+          const res = await fetch(url);
+          const data = await res.json();
+          if (!data.success) {
+            alert(data.error || "Veri alınamadı");
+            return;
+          }
+          const list = data.data || [];
+          renderCharts(list);
+        } catch (e) {
+          alert("İstek başarısız.");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Grafiği Güncelle";
+        }
+      }
+
+      document.getElementById("graph-fetch").addEventListener("click", () => {
+        const fromVal = document.getElementById("graph-from").value;
+        const toVal = document.getElementById("graph-to").value;
+        if (fromVal && toVal) fetchAndRender(fromVal, toVal);
+        else fetchAndRender(null, null);
+      });
+
+      const now = new Date();
+      const fromDate = new Date(now.getTime() - MAX_RANGE_DAYS * 24 * 60 * 60 * 1000);
+      document.getElementById("graph-from").value = toLocalDateStr(fromDate);
+      document.getElementById("graph-to").value = toLocalDateStr(now);
+      fetchAndRender(null, null);
+    </script>
+  </body>
+</html>

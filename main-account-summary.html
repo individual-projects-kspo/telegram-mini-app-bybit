@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Main Account Summary</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow-x: hidden; background: #111827; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      body { -webkit-overflow-scrolling: touch; overscroll-behavior: none; }
+      ::-webkit-scrollbar { display: none; }
+      .header-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+      .content-safe { padding: max(1rem, env(safe-area-inset-left)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+      .card { background: #374151; border: 1px solid #4b5563; }
+      .stat-value { font-variant-numeric: tabular-nums; }
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white min-h-full">
+    <script>
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor("#111827");
+        tg.MainButton.hide();
+        tg.ready();
+      }
+    </script>
+    <header class="bg-gray-900 border-b border-gray-700 header-safe sticky top-0 z-10">
+      <div class="content-safe relative flex items-center py-6">
+        <a href="index.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors z-10">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          <span>Geri</span>
+        </a>
+        <h1 class="absolute left-0 right-0 text-center text-lg font-semibold text-white pointer-events-none">Main Account Summary</h1>
+      </div>
+    </header>
+    <main class="content-safe py-3 overflow-auto" id="main-content">
+      <p class="text-gray-400 text-sm">Yükleniyor...</p>
+    </main>
+    <script>
+      const API = "https://tracker.vinx.online/api/main/balance";
+
+      function escapeHtml(s) {
+        const div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      async function load() {
+        const el = document.getElementById("main-content");
+        try {
+          const res = await fetch(API);
+          const data = await res.json();
+          if (!data.success || !data.data) {
+            el.innerHTML = '<p class="text-red-400 text-sm">Veri alınamadı.</p>';
+            return;
+          }
+          const d = data.data;
+          const summary = d.summary || {};
+          const coinDetails = d.coinDetails || [];
+          const positions = d.positions || [];
+
+          el.innerHTML = `
+            <div class="space-y-3">
+              <!-- Account type -->
+              <div class="card rounded-lg px-3 py-2 flex items-center justify-between">
+                <span class="text-xs text-gray-400">Account Type</span>
+                <span class="text-sm font-medium text-white">${escapeHtml(summary.accountType || "-")}</span>
+              </div>
+              <!-- Özet: 2x3 grid -->
+              <div class="grid grid-cols-2 gap-2">
+                <div class="card rounded-lg p-3">
+                  <p class="text-[10px] text-gray-400 uppercase tracking-wide">Total Equity</p>
+                  <p class="stat-value text-base font-bold text-white">$${Number(summary.totalEquity).toLocaleString()}</p>
+                </div>
+                <div class="card rounded-lg p-3">
+                  <p class="text-[10px] text-gray-400 uppercase tracking-wide">Available</p>
+                  <p class="stat-value text-base font-bold text-white">$${Number(summary.availableBalance).toLocaleString()}</p>
+                </div>
+                <div class="card rounded-lg p-3">
+                  <p class="text-[10px] text-gray-400 uppercase tracking-wide">Margin Balance</p>
+                  <p class="stat-value text-base font-bold text-white">$${Number(summary.marginBalance).toLocaleString()}</p>
+                </div>
+                <div class="card rounded-lg p-3">
+                  <p class="text-[10px] text-gray-400 uppercase tracking-wide">Unrealized PnL</p>
+                  <p class="stat-value text-base font-bold ${summary.unrealizedPnL >= 0 ? "text-green-400" : "text-red-400"}">$${Number(summary.unrealizedPnL).toLocaleString()}</p>
+                </div>
+                <div class="card rounded-lg p-3">
+                  <p class="text-[10px] text-gray-400 uppercase tracking-wide">Open Positions</p>
+                  <p class="stat-value text-base font-bold text-white">${summary.openPositionsCount ?? 0}</p>
+                </div>
+              </div>
+              <!-- Coin details: kompakt liste -->
+              <div>
+                <h3 class="text-xs text-gray-400 uppercase tracking-wide mb-1.5">Coin Details (${coinDetails.length})</h3>
+                <div class="space-y-2">
+                  ${coinDetails.map(coin => {
+                    const pnlClass = (coin.unrealizedPnl || 0) >= 0 ? "text-green-400" : "text-red-400";
+                    return `
+                    <div class="card rounded-lg p-2.5">
+                      <div class="flex items-center justify-between gap-2 mb-1">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <div class="w-7 h-7 bg-amber-600/80 rounded flex items-center justify-center flex-shrink-0"><span class="text-xs font-bold text-white">${escapeHtml((coin.coin || "").slice(0,2))}</span></div>
+                          <div class="min-w-0">
+                            <p class="font-medium text-white text-sm">${escapeHtml(coin.coin)}</p>
+                            <p class="text-[10px] text-gray-500">${escapeHtml(coin.accountType || "")}</p>
+                          </div>
+                        </div>
+                        <span class="text-xs font-semibold ${pnlClass} whitespace-nowrap">${(coin.unrealizedPnl || 0) >= 0 ? "+" : ""}${Number(coin.unrealizedPnl || 0).toLocaleString()}</span>
+                      </div>
+                      <div class="flex items-center justify-between text-[10px] text-gray-400 gap-2">
+                        <span>Wallet: <span class="text-white font-medium">${Number(coin.walletBalance).toLocaleString()}</span></span>
+                        <span>Equity: <span class="text-white font-medium">${Number(coin.equity).toLocaleString()}</span></span>
+                      </div>
+                    </div>`;
+                  }).join("")}
+                </div>
+              </div>
+              ${positions.length === 0 ? '<div class="card rounded-lg px-3 py-2 text-center text-xs text-gray-500">No open positions</div>' : ""}
+            </div>`;
+        } catch (e) {
+          el.innerHTML = '<p class="text-red-400 text-sm">Bir hata oluştu.</p>';
+          console.error(e);
+        }
+      }
+      load();
+    </script>
+  </body>
+</html>

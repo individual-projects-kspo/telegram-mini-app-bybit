@@ -412,6 +412,8 @@
         function createSubaccountModal(data) {
             const summary = data.summary;
             const positions = data.positions;
+            // tr-TR: ondalık ",", binlik "."
+            const fmt = (n, minF = 2, maxF = 2) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: minF, maximumFractionDigits: maxF });
 
             const modal = document.createElement('div');
             modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 opacity-0 transition-opacity duration-300';
@@ -515,7 +517,7 @@
                                 const negativePositions = positions.filter(p => p.unrealizedPnl < 0);
                                 const totalPositivePnl = positivePositions.reduce((s, p) => s + p.unrealizedPnl, 0);
                                 const totalNegativePnl = negativePositions.reduce((s, p) => s + p.unrealizedPnl, 0);
-                                return `<p class="text-xs text-gray-400 mb-2">Anlık kâr <span class="text-green-400 font-medium">+${totalPositivePnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> USDT <span class="text-gray-500 font-medium">(${positivePositions.length} poz)</span> </br> Anlık zarar <span class="text-red-400 font-medium">${totalNegativePnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> USDT <span class="text-gray-500 font-medium">(${negativePositions.length} poz)</span></p>`;
+                                return `<p class="text-xs text-gray-400 mb-2">Anlık kâr <span class="text-green-400 font-medium">+${fmt(totalPositivePnl)}</span> USDT <span class="text-gray-500 font-medium">(${positivePositions.length} poz)</span> </br> Anlık zarar <span class="text-red-400 font-medium">${fmt(totalNegativePnl)}</span> USDT <span class="text-gray-500 font-medium">(${negativePositions.length} poz)</span></p>`;
                             })()}
                             <div class="bg-gray-700 rounded-lg overflow-hidden">
                                 <div class="overflow-x-auto">
@@ -537,13 +539,13 @@
                                                         </span>
                                                     </td>
                                                     <td class="p-1.5 text-right font-medium ${pos.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
-                                                        <span class="whitespace-nowrap">${pos.unrealizedPnl.toLocaleString()} USDT</span><br>
+                                                        <span class="whitespace-nowrap">${fmt(pos.unrealizedPnl)} USDT</span><br>
                                                         <span class="text-xs px-1 py-0.5 rounded whitespace-nowrap ${pos.unrealizedPnl >= 0 ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
-                                                            ${pos.percentage.toFixed(2)}%
+                                                            ${fmt(pos.percentage)}%
                                                         </span>
                                                     </td>
-                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${pos.positionValue.toLocaleString()} USDT</span></td>
-                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${pos.size.toLocaleString() + ' ' + pos.symbol.replace('USDT', '')}</span><br><span class="whitespace-nowrap">${pos.entryPrice.toFixed(6)} USDT</span></td>
+                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${fmt(pos.positionValue)} USDT</span></td>
+                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${fmt(pos.size, 2, 6) + ' ' + pos.symbol.replace('USDT', '')}</span><br><span class="whitespace-nowrap">${fmt(pos.entryPrice, 6, 6)} USDT</span></td>
                                                 </tr>
                                             `).join('')}
                                         </tbody>
@@ -567,12 +569,12 @@
                                                         <span class="text-xs px-1 py-0.5 rounded ${pos.side === 'Buy' ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
                                                             ${pos.side}
                                                         </span></td>
-                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${pos.size.toLocaleString() + ' ' + pos.symbol.replace('USDT', '')}</span><br><span class="whitespace-nowrap">${pos.entryPrice.toFixed(6)} USDT</span></td>
-                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${pos.positionValue.toLocaleString()} USDT</span></td>
+                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${fmt(pos.size, 2, 6) + ' ' + pos.symbol.replace('USDT', '')}</span><br><span class="whitespace-nowrap">${fmt(pos.entryPrice, 6, 6)} USDT</span></td>
+                                                    <td class="p-1.5 text-right text-gray-300"><span class="whitespace-nowrap">${fmt(pos.positionValue)} USDT</span></td>
                                                     <td class="p-1.5 text-right font-medium ${pos.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}">
-                                                        <span class="whitespace-nowrap">${pos.unrealizedPnl.toLocaleString()} USDT</span><br>
+                                                        <span class="whitespace-nowrap">${fmt(pos.unrealizedPnl)} USDT</span><br>
                                                         <span class="text-xs px-1 py-0.5 rounded whitespace-nowrap ${pos.unrealizedPnl >= 0 ? 'bg-green-600 text-green-100' : 'bg-red-600 text-red-100'}">
-                                                            ${pos.percentage.toFixed(2)}%
+                                                            ${fmt(pos.percentage)}%
                                                         </span>
                                                     </td>
                                                 </tr>`;

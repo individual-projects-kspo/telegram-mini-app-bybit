@@ -11,7 +11,7 @@
       html, body { height: 100%; overflow-x: hidden; background: #111827; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
       body { -webkit-overflow-scrolling: touch; overscroll-behavior: none; }
       ::-webkit-scrollbar { display: none; }
-      .header-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+      .header-safe { padding-top: calc(max(1rem, env(safe-area-inset-top)) * 3 / 4); }
       .content-safe { padding: max(1rem, env(safe-area-inset-left)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
       /* Mobil: date input touch alanı */
       input[type="date"] { min-height: 44px; -webkit-appearance: none; appearance: none; }
@@ -28,12 +28,12 @@
       }
     </script>
     <header class="bg-gray-900 border-b border-gray-700 header-safe">
-      <div class="content-safe relative flex items-center py-6">
-        <a href="index.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors z-10">
+      <div class="content-safe flex flex-col items-start gap-2 py-6">
+        <a href="index.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
           <span>Geri</span>
         </a>
-        <h1 class="absolute left-0 right-0 text-center text-lg font-semibold text-white pointer-events-none">Subaccount Stats</h1>
+        <h1 class="text-lg font-semibold text-white text-left">Subaccount Stats</h1>
       </div>
     </header>
     <main class="content-safe py-3 overflow-auto">

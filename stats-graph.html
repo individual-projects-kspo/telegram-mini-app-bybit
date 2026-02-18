@@ -30,7 +30,7 @@
     </script>
     <header class="bg-gray-900 border-b border-gray-700 header-safe">
       <div class="content-safe flex flex-col items-start gap-2 py-6">
-        <a href="subaccount-stats.html" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors">
+        <a href="subaccount-stats.html" onclick="if (window.history.length > 1) { event.preventDefault(); history.back(); }" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
           <span>Geri</span>
         </a>
@@ -59,6 +59,7 @@
     <script>
       const API = "https://tracker.vinx.online/api/sub/summary/history";
       const MAX_RANGE_DAYS = 10;
+      const ISTANBUL_OFFSET_SEC = 3 * 3600;
       const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#22d3ee"];
       let chartInstances = [];
 
@@ -82,7 +83,9 @@
       }
 
       function toUTCTimestamp(dateStr) {
-        return Math.floor(new Date(dateStr).getTime() / 1000);
+        const ms = new Date(dateStr).getTime();
+        if (!Number.isFinite(ms)) return null;
+        return Math.floor(ms / 1000);
       }
 
       const SERIES = [
@@ -126,8 +129,10 @@
       }
 
       function createChart(containerEl, label, data, color, isInteger) {
+        if (!LWC || !containerEl) return null;
+        const w = Math.max(containerEl.clientWidth || 300, 100);
         const chart = LWC.createChart(containerEl, {
-          width: containerEl.clientWidth,
+          width: w,
           height: 220,
           ...darkOptions,
         });
@@ -149,7 +154,7 @@
       function renderCharts(snapshots) {
         destroyCharts();
         const container = document.getElementById("charts-container");
-        if (!LWC) return;
+        if (!container || !LWC) return;
         if (!snapshots.length) {
           container.innerHTML = '<p class="text-gray-400 text-center py-8">Veri yok. Tarih seçip "Grafiği Güncelle" ile yükleyin.</p>';
           return;
@@ -162,18 +167,27 @@
         });
         container.innerHTML = html;
 
+        const snapshotsAsc = [...snapshots].reverse();
         SERIES.forEach((serie, i) => {
-          const data = snapshots
+          const data = snapshotsAsc
             .map((s) => {
               const t = getValue(s, "created_at");
               const v = getValue(s, serie.key);
-              if (t == null || v == null) return null;
+              if (t == null || v == null || v === "") return null;
               const val = serie.key === isIntegerKey ? Math.round(Number(v)) : Number(v);
-              return { time: toUTCTimestamp(t), value: val };
+              if (!Number.isFinite(val)) return null;
+              const time = toUTCTimestamp(t);
+              if (time == null) return null;
+              return { time: time + ISTANBUL_OFFSET_SEC, value: val };
             })
             .filter((x) => x !== null);
           const div = document.getElementById("chart-div-" + i);
-          if (div && data.length) createChart(div, serie.label, data, CHART_COLORS[i % CHART_COLORS.length], serie.key === isIntegerKey);
+          if (!div || !data.length) return;
+          try {
+            createChart(div, serie.label, data, CHART_COLORS[i % CHART_COLORS.length], serie.key === isIntegerKey);
+          } catch (err) {
+            console.error("Chart " + serie.label + " hatası:", err);
+          }
         });
       }
 
@@ -184,17 +198,26 @@
         });
       });
 
+      function toZuluISO(dateStr) {
+        const d = new Date(dateStr + "T00:00:00.000Z");
+        return isNaN(d.getTime()) ? dateStr : d.toISOString();
+      }
+      function toZuluEndOfDay(dateStr) {
+        const d = new Date(dateStr + "T23:59:59.999Z");
+        return isNaN(d.getTime()) ? dateStr : d.toISOString();
+      }
+
       async function fetchAndRender(fromVal, toVal) {
         const btn = document.getElementById("graph-fetch");
         let url = API;
         if (fromVal && toVal) {
-          const fromDate = new Date(fromVal);
-          const toDate = new Date(toVal);
+          const fromDate = new Date(fromVal + "T00:00:00.000Z");
+          const toDate = new Date(toVal + "T00:00:00.000Z");
           if (toDate - fromDate > MAX_RANGE_DAYS * 24 * 60 * 60 * 1000) {
             alert("Aralık en fazla " + MAX_RANGE_DAYS + " gün olabilir.");
             return;
           }
-          url += "?from=" + encodeURIComponent(fromVal) + "&to=" + encodeURIComponent(toVal);
+          url += "?from=" + encodeURIComponent(toZuluISO(fromVal)) + "&to=" + encodeURIComponent(toZuluEndOfDay(toVal));
         }
         btn.disabled = true;
         btn.textContent = "Yükleniyor...";

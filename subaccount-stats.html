@@ -90,6 +90,7 @@
       }
 
       function getStatsValue(snap, key) {
+        if (!snap) return "";
         if (key === "id") return snap.id;
         if (key === "created_at") return snap.created_at;
         if (key.startsWith("summary.")) return snap.summary?.[key.slice(8)];
@@ -102,7 +103,7 @@
         if (key === "created_at" && value) {
           try {
             const d = new Date(value);
-            return isNaN(d.getTime()) ? String(value) : d.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "medium" });
+            return isNaN(d.getTime()) ? String(value) : d.toLocaleString("tr-TR", { dateStyle: "short", timeStyle: "medium", timeZone: "Europe/Istanbul" });
           } catch (_) { return String(value); }
         }
         if (typeof value === "number" && Number.isFinite(value)) {
@@ -138,15 +139,24 @@
         const tbody = document.getElementById("stats-tbody");
         const countEl = document.getElementById("stats-count");
         const btn = document.getElementById("stats-fetch");
+        if (!thead || !tbody || !countEl || !btn) return;
+        function toZuluISO(dateStr) {
+          const d = new Date(dateStr + "T00:00:00.000Z");
+          return isNaN(d.getTime()) ? dateStr : d.toISOString();
+        }
+        function toZuluEndOfDay(dateStr) {
+          const d = new Date(dateStr + "T23:59:59.999Z");
+          return isNaN(d.getTime()) ? dateStr : d.toISOString();
+        }
         let url = API;
         if (fromVal && toVal) {
-          const fromDate = new Date(fromVal);
-          const toDate = new Date(toVal);
+          const fromDate = new Date(fromVal + "T00:00:00.000Z");
+          const toDate = new Date(toVal + "T00:00:00.000Z");
           if (toDate - fromDate > MAX_RANGE_DAYS * 24 * 60 * 60 * 1000) {
             alert("Aralık en fazla " + MAX_RANGE_DAYS + " gün olabilir.");
             return;
           }
-          url += "?from=" + encodeURIComponent(fromVal) + "&to=" + encodeURIComponent(toVal);
+          url += "?from=" + encodeURIComponent(toZuluISO(fromVal)) + "&to=" + encodeURIComponent(toZuluEndOfDay(toVal));
         }
         btn.disabled = true;
         btn.textContent = "Yükleniyor...";
@@ -157,7 +167,7 @@
             alert(data.error || "Veri alınamadı");
             return;
           }
-          const list = data.data || [];
+          const list = Array.isArray(data.data) ? data.data : [];
           thead.innerHTML = "<tr>" + renderHeader() + "</tr>";
           tbody.innerHTML = renderRows(list);
           countEl.textContent = (data.count ?? list.length) + " kayıt";
@@ -169,9 +179,12 @@
         }
       }
 
-      document.getElementById("stats-fetch").addEventListener("click", () => {
-        const fromVal = document.getElementById("stats-from").value;
-        const toVal = document.getElementById("stats-to").value;
+      const statsFetchEl = document.getElementById("stats-fetch");
+      if (statsFetchEl) statsFetchEl.addEventListener("click", () => {
+        const fromEl = document.getElementById("stats-from");
+        const toEl = document.getElementById("stats-to");
+        const fromVal = fromEl ? fromEl.value : "";
+        const toVal = toEl ? toEl.value : "";
         if (fromVal && toVal) fetchAndRender(fromVal, toVal);
         else fetchAndRender(null, null);
       });
@@ -183,10 +196,11 @@
         return y + "-" + m + "-" + day;
       }
       const now = new Date();
-      const toDate = now; // Bitiş: bugün (yerel tarih)
       const fromDate = new Date(now.getTime() - MAX_RANGE_DAYS * 24 * 60 * 60 * 1000);
-      document.getElementById("stats-from").value = toLocalDateStr(fromDate);
-      document.getElementById("stats-to").value = toLocalDateStr(toDate);
+      const fromInput = document.getElementById("stats-from");
+      const toInput = document.getElementById("stats-to");
+      if (fromInput) fromInput.value = toLocalDateStr(fromDate);
+      if (toInput) toInput.value = toLocalDateStr(now);
       fetchAndRender(null, null);
     </script>
   </body>

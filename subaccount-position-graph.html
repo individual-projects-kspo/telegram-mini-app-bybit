@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Pozisyon Grafik</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; overflow-x: hidden; background: #111827; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+      body { -webkit-overflow-scrolling: touch; overscroll-behavior: none; }
+      ::-webkit-scrollbar { display: none; }
+      .header-safe { padding-top: calc(max(1rem, env(safe-area-inset-top)) * 0.25); }
+      .content-safe { padding: max(1rem, env(safe-area-inset-left)); padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+      input[type="date"] { min-height: 44px; -webkit-appearance: none; appearance: none; }
+      .chart-container { height: 220px; width: 100%; position: relative; }
+    </style>
+  </head>
+  <body class="bg-gray-900 text-white min-h-full">
+    <script>
+      if (window.Telegram?.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.setHeaderColor("#111827");
+        tg.MainButton.hide();
+        tg.ready();
+      }
+    </script>
+    <header class="bg-gray-900 border-b border-gray-700 header-safe">
+      <div class="content-safe flex flex-col items-start gap-2 py-6">
+        <a href="subaccount-summary.html" onclick="if (window.history.length > 1) { event.preventDefault(); history.back(); }" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-500 text-gray-300 hover:bg-gray-700 hover:border-gray-400 hover:text-white transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+          <span>Geri</span>
+        </a>
+        <h1 class="text-lg font-semibold text-white text-left" id="title">Pozisyon Grafik</h1>
+      </div>
+    </header>
+    <main class="content-safe py-3 overflow-auto">
+      <div class="bg-gray-800/80 border border-gray-600 rounded-xl p-3 mb-3">
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label for="graph-from" class="block text-xs text-gray-400 mb-1">Başlangıç</label>
+            <input type="date" id="graph-from" class="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <div>
+            <label for="graph-to" class="block text-xs text-gray-400 mb-1">Bitiş</label>
+            <input type="date" id="graph-to" class="w-full px-3 py-2.5 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+        </div>
+        <button type="button" id="graph-fetch" class="w-full py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 rounded-lg text-white font-medium text-sm touch-manipulation select-none">
+          Grafiği Güncelle
+        </button>
+        <p class="text-xs text-gray-500 mt-2">Symbol zorunlu · Aralık en fazla 10 gün</p>
+      </div>
+      <div id="charts-container" class="space-y-6"></div>
+    </main>
+    <script>
+      const MAX_RANGE_DAYS = 10;
+      const MAX_RANGE_MS = MAX_RANGE_DAYS * 24 * 60 * 60 * 1000;
+      const ISTANBUL_OFFSET_SEC = 3 * 3600;
+      const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa"];
+      const LWC = window.LightweightCharts;
+      let chartInstances = [];
+      let selectedSymbol = "";
+
+      function toLocalDateStr(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return y + "-" + m + "-" + day;
+      }
+      function toZuluISO(dateStr) {
+        const d = new Date(dateStr + "T00:00:00.000Z");
+        return isNaN(d.getTime()) ? dateStr : d.toISOString();
+      }
+      function toZuluEndOfDay(dateStr) {
+        const d = new Date(dateStr + "T23:59:59.999Z");
+        return isNaN(d.getTime()) ? dateStr : d.toISOString();
+      }
+      function toUTCTimestamp(dateStr) {
+        const ms = new Date(dateStr).getTime();
+        if (!Number.isFinite(ms)) return null;
+        return Math.floor(ms / 1000);
+      }
+      function getQueryParam(name) {
+        const url = new URL(window.location.href);
+        return (url.searchParams.get(name) || "").trim();
+      }
+
+      const SERIES = [
+        { key: "unrealizedPnl", label: "Unrealized PnL", isInteger: false },
+        { key: "percentage", label: "Percentage (%)", isInteger: false },
+        { key: "positionValue", label: "Position Value", isInteger: false },
+        { key: "size", label: "Size", isInteger: false },
+        { key: "entryPrice", label: "Entry Price", isInteger: false },
+      ];
+
+      const darkOptions = {
+        layout: {
+          background: { type: "solid", color: "#1f2937" },
+          textColor: "#9ca3af",
+        },
+        grid: {
+          vertLines: { color: "#374151" },
+          horzLines: { color: "#374151" },
+        },
+        rightPriceScale: {
+          borderColor: "#4b5563",
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+        timeScale: {
+          borderColor: "#4b5563",
+          timeVisible: true,
+          secondsVisible: false,
+        },
+      };
+
+      function destroyCharts() {
+        chartInstances.forEach((c) => c?.remove && c.remove());
+        chartInstances = [];
+      }
+
+      function createChart(containerEl, data, color, isInteger) {
+        const chart = LWC.createChart(containerEl, {
+          width: Math.max(containerEl.clientWidth || 300, 100),
+          height: 220,
+          ...darkOptions,
+        });
+        const series = chart.addLineSeries({
+          color,
+          lineWidth: 2,
+          priceFormat: {
+            type: "price",
+            precision: isInteger ? 0 : 4,
+            minMove: isInteger ? 1 : 0.0001,
+          },
+        });
+        series.setData(data);
+        chart.timeScale().fitContent();
+        chartInstances.push(chart);
+      }
+
+      function renderCharts(rows) {
+        const container = document.getElementById("charts-container");
+        destroyCharts();
+        if (!rows.length) {
+          container.innerHTML = '<p class="text-gray-400 text-center py-8">Seçilen aralıkta veri yok.</p>';
+          return;
+        }
+
+        const asc = [...rows].reverse();
+        container.innerHTML = SERIES.map((s, i) =>
+          `<div class="bg-gray-800/60 border border-gray-600 rounded-lg p-3">
+            <p class="text-xs text-gray-400 mb-2">${s.label}</p>
+            <div id="chart-${i}" class="chart-container"></div>
+          </div>`
+        ).join("");
+
+        SERIES.forEach((s, i) => {
+          const points = asc.map((r) => {
+            const v = Number(r[s.key]);
+            const t = toUTCTimestamp(r.created_at);
+            if (!Number.isFinite(v) || t == null) return null;
+            return { time: t + ISTANBUL_OFFSET_SEC, value: v };
+          }).filter(Boolean);
+          if (!points.length) return;
+          const el = document.getElementById(`chart-${i}`);
+          if (!el) return;
+          createChart(el, points, CHART_COLORS[i % CHART_COLORS.length], s.isInteger);
+        });
+      }
+
+      async function fetchAndRender(fromVal, toVal) {
+        const btn = document.getElementById("graph-fetch");
+        let url = `https://tracker.vinx.online/api/sub/positions/history?symbol=${encodeURIComponent(selectedSymbol)}`;
+        if (fromVal && toVal) {
+          const fromDate = new Date(fromVal + "T00:00:00.000Z");
+          const toDate = new Date(toVal + "T00:00:00.000Z");
+          if (toDate - fromDate > MAX_RANGE_MS) {
+            alert("Aralık en fazla 10 gün olabilir.");
+            return;
+          }
+          url += `&from=${encodeURIComponent(toZuluISO(fromVal))}&to=${encodeURIComponent(toZuluEndOfDay(toVal))}`;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Yükleniyor...";
+        try {
+          const res = await fetch(url);
+          const payload = await res.json();
+          if (!res.ok || !payload.success) {
+            alert(payload.error || payload.message || `Hata ${res.status}`);
+            return;
+          }
+          renderCharts(payload.data || []);
+        } catch (err) {
+          console.error(err);
+          alert("Veri alınırken hata oluştu.");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Grafiği Güncelle";
+        }
+      }
+
+      window.addEventListener("resize", () => {
+        chartInstances.forEach((chart, i) => {
+          const el = document.getElementById(`chart-${i}`);
+          if (chart && el?.clientWidth) chart.applyOptions({ width: el.clientWidth });
+        });
+      });
+
+      (function init() {
+        if (!LWC) {
+          document.getElementById("charts-container").innerHTML = '<p class="text-red-400 text-center py-4">Lightweight Charts yüklenemedi.</p>';
+          return;
+        }
+
+        selectedSymbol = getQueryParam("symbol").toUpperCase();
+        if (!selectedSymbol) {
+          document.getElementById("charts-container").innerHTML = '<p class="text-red-400 text-center py-4">Symbol bulunamadı.</p>';
+          return;
+        }
+        document.getElementById("title").textContent = `${selectedSymbol} Pozisyon Grafik`;
+
+        const now = new Date();
+        const fromDate = new Date(now.getTime() - MAX_RANGE_MS);
+        document.getElementById("graph-from").value = toLocalDateStr(fromDate);
+        document.getElementById("graph-to").value = toLocalDateStr(now);
+
+        document.getElementById("graph-fetch").addEventListener("click", () => {
+          const fromVal = document.getElementById("graph-from").value;
+          const toVal = document.getElementById("graph-to").value;
+          if (fromVal && toVal) fetchAndRender(fromVal, toVal);
+          else fetchAndRender(null, null);
+        });
+
+        fetchAndRender(null, null);
+      })();
+    </script>
+  </body>
+</html>

@@ -43,12 +43,17 @@
 
       function positionRowHtml(pos) {
         const sym = escapeHtml((pos.symbol || "").replace("USDT", ""));
-        return `<tr class="hover:bg-gray-600 border-b border-gray-600">
+        const symbolParam = encodeURIComponent(pos.symbol || "");
+        return `<tr class="hover:bg-gray-600 border-b border-gray-600 cursor-pointer" onclick="goToPositionHistory('${symbolParam}')">
           <td class="p-2 text-white font-medium text-xs font-bold">${escapeHtml(pos.symbol)}<br><span class="text-xs px-1 py-0.5 rounded ${pos.side === "Buy" ? "bg-green-600" : "bg-red-600"}">${escapeHtml(pos.side)}</span></td>
           <td class="p-2 text-right font-medium text-xs ${pos.unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}"><span class="whitespace-nowrap font-bold">${fmt(pos.unrealizedPnl)} USDT</span><br><span class="text-xs px-1 py-0.5 rounded whitespace-nowrap ${(pos.percentage || 0) >= 0 ? "bg-green-600 text-green-100" : "bg-red-600 text-red-100"}">${(pos.percentage || 0) >= 0 ? "+" : ""}${fmt(pos.percentage)}%</span></td>
           <td class="p-2 text-right text-gray-300 text-xs font-bold"><span class="whitespace-nowrap">${fmt(pos.positionValue)} USDT</span></td>
           <td class="p-2 text-right text-gray-300 text-xs font-bold"><span class="whitespace-nowrap">${fmt(pos.size, 2, 6)} ${sym}</span><br><span class="text-xs whitespace-nowrap">${fmt(pos.entryPrice, 6, 6)} USDT</span></td>
         </tr>`;
+      }
+
+      function goToPositionHistory(symbolParam) {
+        window.location.href = `subaccount-position-graph.html?symbol=${symbolParam}`;
       }
 
       function escapeHtml(s) {

@@ -59,9 +59,16 @@
     <script>
       const API = "https://tracker.vinx.online/api/sub/summary/history";
       const MAX_RANGE_DAYS = 10;
+      const MAX_RANGE_MS = MAX_RANGE_DAYS * 24 * 60 * 60 * 1000;
       const ISTANBUL_OFFSET_SEC = 3 * 3600;
       const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa", "#22d3ee"];
       let chartInstances = [];
+      let chartModels = [];
+      let loadedSnapshots = [];
+      let oldestLoadedMs = null;
+      let isLoadingOlder = false;
+      let noMoreOlderData = false;
+      let oldestRequestedToIso = "";
 
       const LWC = window.LightweightCharts;
       if (!LWC) {
@@ -126,6 +133,7 @@
           if (c && c.remove) c.remove();
         });
         chartInstances = [];
+        chartModels = [];
       }
 
       function createChart(containerEl, label, data, color, isInteger) {
@@ -148,7 +156,94 @@
         series.setData(data);
         chart.timeScale().fitContent();
         chartInstances.push(chart);
+        chartModels.push({ chart, series, key: label });
         return chart;
+      }
+
+      function buildSeriesPoints(snapshotsAsc, serieKey, isIntegerKey) {
+        return snapshotsAsc
+          .map((s) => {
+            const t = getValue(s, "created_at");
+            const v = getValue(s, serieKey);
+            if (t == null || v == null || v === "") return null;
+            const val = serieKey === isIntegerKey ? Math.round(Number(v)) : Number(v);
+            if (!Number.isFinite(val)) return null;
+            const time = toUTCTimestamp(t);
+            if (time == null) return null;
+            return { time: time + ISTANBUL_OFFSET_SEC, value: val };
+          })
+          .filter((x) => x !== null);
+      }
+
+      function mergeSnapshots(existing, incoming) {
+        const map = new Map();
+        existing.forEach((s) => map.set(s.created_at, s));
+        incoming.forEach((s) => map.set(s.created_at, s));
+        const merged = Array.from(map.values());
+        merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        return merged;
+      }
+
+      function refreshChartsAfterPrepend(addedLeftCount) {
+        const isIntegerKey = "summary.openPositionsCount";
+        chartModels.forEach((m) => {
+          const prevRange = m.chart.timeScale().getVisibleLogicalRange();
+          const serie = SERIES.find((s) => s.label === m.key);
+          if (!serie) return;
+          const points = buildSeriesPoints(loadedSnapshots, serie.key, isIntegerKey);
+          m.series.setData(points);
+          if (prevRange && Number.isFinite(prevRange.from) && Number.isFinite(prevRange.to)) {
+            m.chart.timeScale().setVisibleLogicalRange({
+              from: prevRange.from + addedLeftCount,
+              to: prevRange.to + addedLeftCount,
+            });
+          }
+        });
+      }
+
+      async function loadOlderDataIfNeeded() {
+        if (isLoadingOlder || noMoreOlderData || !loadedSnapshots.length || oldestLoadedMs == null) return;
+        isLoadingOlder = true;
+        try {
+          const olderTo = new Date(oldestLoadedMs - 1);
+          const olderFrom = new Date(olderTo.getTime() - MAX_RANGE_MS);
+          const olderToIso = olderTo.toISOString();
+          if (oldestRequestedToIso === olderToIso) {
+            noMoreOlderData = true;
+            return;
+          }
+          oldestRequestedToIso = olderToIso;
+          const url = `${API}?from=${encodeURIComponent(olderFrom.toISOString())}&to=${encodeURIComponent(olderToIso)}`;
+          const res = await fetch(url);
+          const payload = await res.json();
+          if (!res.ok || !payload.success) return;
+          const incoming = Array.isArray(payload.data) ? payload.data : [];
+          if (!incoming.length) {
+            noMoreOlderData = true;
+            return;
+          }
+          const before = loadedSnapshots.length;
+          loadedSnapshots = mergeSnapshots(loadedSnapshots, incoming);
+          const addedLeftCount = loadedSnapshots.length - before;
+          const newOldestMs = new Date(loadedSnapshots[0].created_at).getTime();
+          if (!Number.isFinite(newOldestMs) || newOldestMs >= oldestLoadedMs || addedLeftCount <= 0) {
+            noMoreOlderData = true;
+            return;
+          }
+          oldestLoadedMs = newOldestMs;
+          refreshChartsAfterPrepend(addedLeftCount);
+        } catch (err) {
+          console.error("Stats graph older data load error:", err);
+        } finally {
+          isLoadingOlder = false;
+        }
+      }
+
+      function bindOlderScrollLoader(chart) {
+        chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+          if (!range || !Number.isFinite(range.from)) return;
+          if (range.from < 3) loadOlderDataIfNeeded();
+        });
       }
 
       function renderCharts(snapshots) {
@@ -167,24 +262,17 @@
         });
         container.innerHTML = html;
 
-        const snapshotsAsc = [...snapshots].reverse();
+        loadedSnapshots = [...snapshots].reverse();
+        oldestLoadedMs = new Date(loadedSnapshots[0].created_at).getTime();
+        noMoreOlderData = false;
+        oldestRequestedToIso = "";
         SERIES.forEach((serie, i) => {
-          const data = snapshotsAsc
-            .map((s) => {
-              const t = getValue(s, "created_at");
-              const v = getValue(s, serie.key);
-              if (t == null || v == null || v === "") return null;
-              const val = serie.key === isIntegerKey ? Math.round(Number(v)) : Number(v);
-              if (!Number.isFinite(val)) return null;
-              const time = toUTCTimestamp(t);
-              if (time == null) return null;
-              return { time: time + ISTANBUL_OFFSET_SEC, value: val };
-            })
-            .filter((x) => x !== null);
+          const data = buildSeriesPoints(loadedSnapshots, serie.key, isIntegerKey);
           const div = document.getElementById("chart-div-" + i);
           if (!div || !data.length) return;
           try {
-            createChart(div, serie.label, data, CHART_COLORS[i % CHART_COLORS.length], serie.key === isIntegerKey);
+            const chart = createChart(div, serie.label, data, CHART_COLORS[i % CHART_COLORS.length], serie.key === isIntegerKey);
+            if (chart) bindOlderScrollLoader(chart);
           } catch (err) {
             console.error("Chart " + serie.label + " hatası:", err);
           }
@@ -213,7 +301,7 @@
         if (fromVal && toVal) {
           const fromDate = new Date(fromVal + "T00:00:00.000Z");
           const toDate = new Date(toVal + "T00:00:00.000Z");
-          if (toDate - fromDate > MAX_RANGE_DAYS * 24 * 60 * 60 * 1000) {
+          if (toDate - fromDate > MAX_RANGE_MS) {
             alert("Aralık en fazla " + MAX_RANGE_DAYS + " gün olabilir.");
             return;
           }

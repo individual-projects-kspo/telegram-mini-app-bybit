@@ -63,7 +63,13 @@
       const CHART_COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f472b6", "#a78bfa"];
       const LWC = window.LightweightCharts;
       let chartInstances = [];
+      let chartModels = [];
       let selectedSymbol = "";
+      let loadedRows = [];
+      let oldestLoadedMs = null;
+      let isLoadingOlder = false;
+      let noMoreOlderData = false;
+      let oldestRequestedToIso = "";
 
       function toLocalDateStr(d) {
         const y = d.getFullYear();
@@ -120,9 +126,10 @@
       function destroyCharts() {
         chartInstances.forEach((c) => c?.remove && c.remove());
         chartInstances = [];
+        chartModels = [];
       }
 
-      function createChart(containerEl, data, color, isInteger) {
+      function createChart(containerEl, data, color, isInteger, key) {
         const chart = LWC.createChart(containerEl, {
           width: Math.max(containerEl.clientWidth || 300, 100),
           height: 220,
@@ -140,6 +147,85 @@
         series.setData(data);
         chart.timeScale().fitContent();
         chartInstances.push(chart);
+        chartModels.push({ chart, series, key });
+      }
+
+      function buildPoints(rowsAsc, key) {
+        return rowsAsc.map((r) => {
+          const v = Number(r[key]);
+          const t = toUTCTimestamp(r.created_at);
+          if (!Number.isFinite(v) || t == null) return null;
+          return { time: t + ISTANBUL_OFFSET_SEC, value: v };
+        }).filter(Boolean);
+      }
+
+      function mergeRows(existingRows, incomingRows) {
+        const map = new Map();
+        existingRows.forEach((r) => map.set(r.created_at, r));
+        incomingRows.forEach((r) => map.set(r.created_at, r));
+        const merged = Array.from(map.values());
+        merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        return merged;
+      }
+
+      function refreshChartData(addedLeftCount) {
+        chartModels.forEach((m) => {
+          const prevRange = m.chart.timeScale().getVisibleLogicalRange();
+          const points = buildPoints(loadedRows, m.key);
+          m.series.setData(points);
+          if (prevRange && Number.isFinite(prevRange.from) && Number.isFinite(prevRange.to)) {
+            m.chart.timeScale().setVisibleLogicalRange({
+              from: prevRange.from + addedLeftCount,
+              to: prevRange.to + addedLeftCount,
+            });
+          }
+        });
+      }
+
+      async function loadOlderDataIfNeeded() {
+        if (isLoadingOlder || noMoreOlderData || !loadedRows.length || oldestLoadedMs == null) return;
+        isLoadingOlder = true;
+        try {
+          const currentOldest = new Date(oldestLoadedMs);
+          const olderTo = new Date(currentOldest.getTime() - 1);
+          const olderFrom = new Date(olderTo.getTime() - MAX_RANGE_MS);
+          const olderToIso = olderTo.toISOString();
+          if (oldestRequestedToIso === olderToIso) {
+            noMoreOlderData = true;
+            return;
+          }
+          oldestRequestedToIso = olderToIso;
+          const url = `https://tracker.vinx.online/api/sub/positions/history?symbol=${encodeURIComponent(selectedSymbol)}&from=${encodeURIComponent(olderFrom.toISOString())}&to=${encodeURIComponent(olderTo.toISOString())}`;
+          const res = await fetch(url);
+          const payload = await res.json();
+          if (!res.ok || !payload.success) return;
+          const incoming = Array.isArray(payload.data) ? payload.data : [];
+          if (!incoming.length) {
+            noMoreOlderData = true;
+            return;
+          }
+          const before = loadedRows.length;
+          loadedRows = mergeRows(loadedRows, incoming);
+          const addedLeftCount = loadedRows.length - before;
+          const newOldestMs = new Date(loadedRows[0].created_at).getTime();
+          if (!Number.isFinite(newOldestMs) || newOldestMs >= oldestLoadedMs || addedLeftCount <= 0) {
+            noMoreOlderData = true;
+            return;
+          }
+          oldestLoadedMs = newOldestMs;
+          refreshChartData(addedLeftCount);
+        } catch (err) {
+          console.error("Eski veri yükleme hatası:", err);
+        } finally {
+          isLoadingOlder = false;
+        }
+      }
+
+      function bindOlderScrollLoader(chart) {
+        chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+          if (!range || !Number.isFinite(range.from)) return;
+          if (range.from < 3) loadOlderDataIfNeeded();
+        });
       }
 
       function renderCharts(rows) {
@@ -149,8 +235,10 @@
           container.innerHTML = '<p class="text-gray-400 text-center py-8">Seçilen aralıkta veri yok.</p>';
           return;
         }
-
-        const asc = [...rows].reverse();
+        loadedRows = [...rows].reverse();
+        oldestLoadedMs = new Date(loadedRows[0].created_at).getTime();
+        noMoreOlderData = false;
+        oldestRequestedToIso = "";
         container.innerHTML = SERIES.map((s, i) =>
           `<div class="bg-gray-800/60 border border-gray-600 rounded-lg p-3">
             <p class="text-xs text-gray-400 mb-2">${s.label}</p>
@@ -159,16 +247,13 @@
         ).join("");
 
         SERIES.forEach((s, i) => {
-          const points = asc.map((r) => {
-            const v = Number(r[s.key]);
-            const t = toUTCTimestamp(r.created_at);
-            if (!Number.isFinite(v) || t == null) return null;
-            return { time: t + ISTANBUL_OFFSET_SEC, value: v };
-          }).filter(Boolean);
+          const points = buildPoints(loadedRows, s.key);
           if (!points.length) return;
           const el = document.getElementById(`chart-${i}`);
           if (!el) return;
-          createChart(el, points, CHART_COLORS[i % CHART_COLORS.length], s.isInteger);
+          createChart(el, points, CHART_COLORS[i % CHART_COLORS.length], s.isInteger, s.key);
+          const model = chartModels[chartModels.length - 1];
+          if (model?.chart) bindOlderScrollLoader(model.chart);
         });
       }
 

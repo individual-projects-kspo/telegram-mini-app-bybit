@@ -195,7 +195,7 @@
             return;
           }
           oldestRequestedToIso = olderToIso;
-          const url = `https://tracker.vinx.online/api/sub/positions/history?symbol=${encodeURIComponent(selectedSymbol)}&from=${encodeURIComponent(olderFrom.toISOString())}&to=${encodeURIComponent(olderTo.toISOString())}`;
+          const url = `https://tracker_2312312_ssa_nbasbdhhshs12.vinu.com.tr/api/sub/positions/history?symbol=${encodeURIComponent(selectedSymbol)}&from=${encodeURIComponent(olderFrom.toISOString())}&to=${encodeURIComponent(olderTo.toISOString())}`;
           const res = await fetch(url);
           const payload = await res.json();
           if (!res.ok || !payload.success) return;
@@ -259,7 +259,7 @@
 
       async function fetchAndRender(fromVal, toVal) {
         const btn = document.getElementById("graph-fetch");
-        let url = `https://tracker.vinx.online/api/sub/positions/history?symbol=${encodeURIComponent(selectedSymbol)}`;
+        let url = `https://tracker_2312312_ssa_nbasbdhhshs12.vinu.com.tr/api/sub/positions/history?symbol=${encodeURIComponent(selectedSymbol)}`;
         if (fromVal && toVal) {
           const fromDate = new Date(fromVal + "T00:00:00.000Z");
           const toDate = new Date(toVal + "T00:00:00.000Z");

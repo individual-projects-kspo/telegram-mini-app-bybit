@@ -6,6 +6,7 @@
     <title>Stats Grafik</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="api.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -57,7 +58,7 @@
       <div id="charts-container" class="space-y-6"></div>
     </main>
     <script>
-      const API = "https://tracker_2312312_ssa_nbasbdhhshs12.vinu.com.tr/api/sub/summary/history";
+      const API = "https://ubsbot.vinu.com.tr/api/sub/summary/history";
       const MAX_RANGE_DAYS = 10;
       const MAX_RANGE_MS = MAX_RANGE_DAYS * 24 * 60 * 60 * 1000;
       const ISTANBUL_OFFSET_SEC = 3 * 3600;
@@ -214,7 +215,7 @@
           }
           oldestRequestedToIso = olderToIso;
           const url = `${API}?from=${encodeURIComponent(olderFrom.toISOString())}&to=${encodeURIComponent(olderToIso)}`;
-          const res = await fetch(url);
+          const res = await apiFetch(url);
           const payload = await res.json();
           if (!res.ok || !payload.success) return;
           const incoming = Array.isArray(payload.data) ? payload.data : [];
@@ -310,7 +311,7 @@
         btn.disabled = true;
         btn.textContent = "Yükleniyor...";
         try {
-          const res = await fetch(url);
+          const res = await apiFetch(url);
           const text = await res.text();
           let data;
           try {
